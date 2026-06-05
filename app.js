@@ -146,10 +146,10 @@ function getTradeEquity() {
 
 function calculateTargetDiscount(v, targetPayment) {
   const quote = calculateLeaseQuote(v, getCardLeaseSelection(v.vin));
-  const target = number(targetPayment);
+  const target = Math.min(number(targetPayment), number(quote.monthlyPayment));
   const residual = quote.residualValue;
   const term = quote.term || 36;
-  const mf = number(v.money_factor);
+  const mf = number(quote.moneyFactor);
   const tradeEquity = getTradeEquity();
   const currentCapCost = Math.max(0, quote.publicCapCost - tradeEquity);
 
@@ -430,8 +430,8 @@ function calculateLeaseQuote(v, options = {}) {
   const bankAcquisitionFee = number(v.acquisition_fee);
   const dealerAddons = number(v.dealer_addons_amount || v.junk_fee);
   const fairMarketPrice = number(v.sale_price || v.advertised_price || msrp);
-  const financeAmount = Math.max(0, fairMarketPrice - incentive + bankAcquisitionFee);
-  const publicCapCost = financeAmount;
+  const adjustedCapCost = Math.max(0, msrp - incentive + bankAcquisitionFee);
+  const publicCapCost = adjustedCapCost;
   const residualPercent = number(program?.residual_percent || v.residual_percent);
   const residualValue = msrp * (residualPercent / 100);
   const moneyFactor = number(program?.money_factor || v.money_factor);
@@ -446,10 +446,12 @@ function calculateLeaseQuote(v, options = {}) {
     bankAcquisitionFee,
     dealerAddons,
     fairMarketPrice,
-    financeAmount,
+    adjustedCapCost,
+    financeAmount: adjustedCapCost,
     publicCapCost,
     residualPercent,
     residualValue,
+    moneyFactor,
     monthlyPayment,
     term,
     miles,
@@ -1179,8 +1181,8 @@ function renderVehicleCard(v) {
         <div class="price-box">
           <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
           <div><span>Dealer Website Price</span><b>${money(v.sale_price)}</b></div>
-          <div><span>Fair Market Price</span><b>${money(quote.fairMarketPrice)}</b></div>
-          <div><span>Finance Amount Est.</span><b>${money(quote.financeAmount)}</b></div>
+          <div><span>Website Price Reference</span><b>${money(quote.fairMarketPrice)}</b></div>
+          <div><span>Adjusted Cap Cost Est.</span><b>${money(quote.adjustedCapCost)}</b></div>
           <div><span>Manufacturer Incentive</span><b>${quote.incentive ? money(quote.incentive) : "None found"}</b></div>
           ${showInvoice ? `<div><span>Invoice</span><b>${money(v.invoice_price)}</b></div>` : ""}
           ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
@@ -1226,8 +1228,9 @@ function renderVehicleCard(v) {
 
         <div class="formula-box">
           <b>Estimate Disclaimer</b>
-          <span>Finance amount estimate: fair market / dealer website price - manufacturer incentive + bank acquisition fee. Payment is calculated from residual value and money factor.</span>
-          <span>Before additional dealer discount, taxes, registration/government fees, dealer add-ons, and final dealer documents. Final numbers must be checked with the dealer before signing.</span>
+          <span>Lease structure: adjusted cap cost = MSRP - manufacturer incentive + bank acquisition fee. Estimated monthly = depreciation charge plus rent charge.</span>
+          <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) × money factor.</span>
+          <span>Before dealer discount, taxes, registration/government fees, doc fee, dealer add-ons, and final dealer documents.</span>
         </div>
 
         ${
@@ -1277,12 +1280,14 @@ function updateTargetPayment(vin) {
   const targetInput = document.getElementById(`target_${vin}`);
   const maxTarget = Math.floor(quote.monthlyPayment || 0);
   let target = Number(targetInput?.value || 0);
+  let capped = false;
 
   if (targetInput) {
     targetInput.max = String(maxTarget);
     if (target > maxTarget && maxTarget > 0) {
       target = maxTarget;
       targetInput.value = String(maxTarget);
+      capped = true;
     }
   }
 
@@ -1294,9 +1299,9 @@ function updateTargetPayment(vin) {
     box.innerHTML = target
       ? `
         <b>${result.label}</b>
+        ${capped ? `<span>Target payment cannot be higher than the current estimated monthly payment, so it was capped at ${money(maxTarget)}/mo.</span>` : ""}
         <span>Dealer needs about ${money(result.requiredDiscount)} additional discount to reach ${money(target)}/mo.</span>
         <span>${(result.discountPercent * 100).toFixed(1)}% of MSRP. Trade equity applied: ${money(result.tradeEquity)}.</span>
-        <span>Target cannot be higher than the current estimated monthly payment of ${money(maxTarget)}/mo.</span>
       `
       : `
         <b>${result.label}</b>
