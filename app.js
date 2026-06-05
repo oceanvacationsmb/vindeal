@@ -329,11 +329,45 @@ function conditionalIncentiveText(v) {
   return `Conditional incentives detected on dealer page: ${money(conditional)}. Buyer must qualify and dealer must verify.`;
 }
 
-function normalizeStickerUrl(v) {
-  if (v.window_sticker_url) return v.window_sticker_url;
-
+function vehicleIncentiveRows(v) {
   const raw = v.raw_data || {};
-  const clickEvent = raw.card_json?.VehicleCard?.WindowStickerModel?.ClickEvent || "";
+  const rows = [];
+  const seen = new Set();
+
+  const addRow = (name, amount, detail = "") => {
+    const numericAmount = number(amount);
+    const key = `${normalizeText(name)}:${numericAmount}`;
+    if (!numericAmount || seen.has(key)) return;
+    seen.add(key);
+    rows.push({ name, amount: numericAmount, detail });
+  };
+
+  addRow("Manufacturer incentive applied", v.manufacturer_rebate || raw.detected_rebate, "Included in the public estimate.");
+
+  (v.available_rebates || raw.available_rebates || []).forEach((r) => {
+    addRow(
+      r.rebate_name || r.name || "Manufacturer incentive",
+      r.amount,
+      `${r.customer_must_qualify ? "Must qualify. " : ""}${r.verified ? "Verified." : "Dealer/OEM verification needed."}`
+    );
+  });
+
+  const conditional = conditionalIncentiveText(v);
+  if (conditional) {
+    addRow("Conditional incentives detected", raw.price_library?.["PriceStak Line-Item Incentives - Conditional"], "May include military, first responder, student, loyalty, or other programs. Buyer must qualify.");
+  }
+
+  return rows;
+}
+
+function normalizeStickerUrl(v) {
+  const raw = v.raw_data || {};
+  const stickerModel =
+    raw.card_json?.VehicleCard?.WindowStickerModel ||
+    raw.card_json?.VehicleCard?.VehicleFeaturesModel?.WindowStickersModel ||
+    raw.card_json?.VehicleCard?.VehicleFeaturesModel?.WindowStickerModel ||
+    {};
+  const clickEvent = stickerModel.ClickEvent || "";
   const match = clickEvent.match(/OpenWindowSticker\('([^']+)'/);
   const stickerPath = match?.[1];
 
@@ -343,6 +377,16 @@ function normalizeStickerUrl(v) {
       return `${origin}${stickerPath}`;
     } catch (error) {
       return stickerPath;
+    }
+  }
+
+  if (v.window_sticker_url) {
+    try {
+      const url = new URL(v.window_sticker_url, v.listing_url || window.location.origin);
+      url.searchParams.set("_", Date.now().toString());
+      return url.toString();
+    } catch (error) {
+      return v.window_sticker_url;
     }
   }
 
@@ -952,7 +996,7 @@ async function scanBackendInventory() {
     setSearchUiState("idle");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Search Lease Deals";
+    btn.textContent = "Find My Car";
   }
 }
 
@@ -1040,7 +1084,7 @@ function renderVehicleCard(v) {
   const quote = calculateLeaseQuote(v);
   const basePayment = quote.monthlyPayment || Number(v.base_monthly_payment || v.estimated_payment || 0);
   const dealerAddons = detectDealerAddons(v);
-  const conditionalIncentives = conditionalIncentiveText(v);
+  const incentiveRows = vehicleIncentiveRows(v);
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
   const isFavorite = favoriteVins.has(v.vin);
   const isSelected = selectedVins.has(v.vin);
@@ -1131,13 +1175,12 @@ function renderVehicleCard(v) {
         <div class="rebate-list">
           <b>Available Manufacturer Incentives</b>
           ${
-            (v.available_rebates?.length || raw.available_rebates?.length)
-              ? (v.available_rebates || raw.available_rebates)
-                  .map((r) => `<span>${r.rebate_name}: ${money(r.amount)}${r.customer_must_qualify ? " · must qualify" : ""}${r.verified ? " · verified" : " · not verified"}</span>`)
+            incentiveRows.length
+              ? incentiveRows
+                  .map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`)
                   .join("")
               : `<span>No manufacturer incentives available for this car.</span>`
           }
-          ${conditionalIncentives ? `<span>${conditionalIncentives}</span>` : ""}
         </div>
 
         <div class="action-row">
