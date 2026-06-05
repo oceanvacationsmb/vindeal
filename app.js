@@ -4,10 +4,8 @@ const SCAN_INVENTORY_URL = `${SUPABASE_URL}/functions/v1/scan-inventory`;
 
 let vehicles = [];
 let catalog = [];
-let featuresCatalog = [];
 let colorsCatalog = [];
 let rebatesCatalog = [];
-let financeProgram = null;
 let leaseProgramPreview = null;
 let removedVins = new Set();
 let favoriteVins = new Set();
@@ -41,12 +39,6 @@ async function loadCatalog() {
   );
 
   updateBrandOptions();
-}
-
-async function loadAllFeatures() {
-  featuresCatalog = await supabaseGet(
-    "vehicle_features_catalog?select=brand,model,feature_name&active=eq.true&order=feature_name.asc"
-  );
 }
 
 async function loadAllColors() {
@@ -117,7 +109,6 @@ function updateYearOptions() {
 }
 
 async function refreshModelFilters() {
-  loadFeatureOptions();
   loadColorOptions();
   await loadProgramsForSelectedCar();
 }
@@ -144,41 +135,28 @@ function buildCheckPills(boxId, values, name, checkedAny = true) {
     .join("");
 
   box.querySelectorAll("input").forEach((input) => {
-    input.addEventListener("change", () => handleAnyCheckbox(boxId, name));
+    input.addEventListener("change", () => handleAnyCheckbox(boxId, name, input));
   });
 }
 
-function handleAnyCheckbox(boxId, name) {
+function handleAnyCheckbox(boxId, name, changedInput) {
   const box = document.getElementById(boxId);
   const inputs = [...box.querySelectorAll(`input[name="${name}"]`)];
   const any = inputs.find((x) => x.value === "Any");
 
   if (!any) return;
 
-  if (event?.target?.value === "Any" && any.checked) {
+  if (changedInput.value === "Any" && any.checked) {
     inputs.forEach((x) => {
       if (x.value !== "Any") x.checked = false;
     });
-  } else if (event?.target?.value !== "Any") {
+  } else if (changedInput.value !== "Any") {
     any.checked = false;
   }
 
   if (!inputs.some((x) => x.checked)) {
     any.checked = true;
   }
-}
-
-function loadFeatureOptions() {
-  const brand = document.getElementById("brand")?.value || "";
-  const model = document.getElementById("model")?.value || "";
-
-  const features = unique(
-    featuresCatalog
-      .filter((x) => x.brand === brand && x.model === model)
-      .map((x) => x.feature_name)
-  );
-
-  buildCheckPills("featureOptions", features, "feature", false);
 }
 
 function loadColorOptions() {
@@ -222,19 +200,12 @@ async function loadProgramsForSelectedCar() {
   const model = document.getElementById("model")?.value || "";
   const trim = document.getElementById("trim")?.value || "Any";
   const year = Number(document.getElementById("year")?.value || 2026);
-  const dealType = document.getElementById("dealType")?.value || "lease";
   const term = Number(document.getElementById("term")?.value || 36);
   const miles = Number(document.getElementById("miles")?.value || 10000);
 
   rebatesCatalog = await supabaseGet(
     `manufacturer_rebate_programs?select=*&active=eq.true&brand=eq.${encodeURIComponent(brand)}&model=eq.${encodeURIComponent(model)}&year=eq.${year}&order=amount.desc`
   );
-
-  const financePrograms = await supabaseGet(
-    `manufacturer_finance_programs?select=*&active=eq.true&brand=eq.${encodeURIComponent(brand)}&model=eq.${encodeURIComponent(model)}&year=eq.${year}&order=apr.asc`
-  );
-
-  financeProgram = financePrograms[0] || null;
 
   const leasePrograms = await supabaseGet(
     `lease_programs?select=*&active=eq.true&brand=eq.${encodeURIComponent(brand)}&model=eq.${encodeURIComponent(model)}&year=eq.${year}&term=eq.${term}&miles=eq.${miles}&order=created_at.desc`
@@ -246,7 +217,7 @@ async function loadProgramsForSelectedCar() {
     null;
 
   renderRebateOptions();
-  renderProgramPreview(dealType);
+  renderProgramPreview();
 }
 
 function renderRebateOptions() {
@@ -259,15 +230,16 @@ function renderRebateOptions() {
 
   box.innerHTML = rebatesCatalog
     .map((r) => {
-      const mustQualify = r.customer_must_qualify ? "Qualify only" : "General";
+      const mustQualify = r.customer_must_qualify ? "Must qualify" : "General";
       const checked = r.customer_must_qualify ? "" : "checked";
+      const verified = r.verified ? "Verified" : "Not verified";
 
       return `
         <label class="rebate-pill">
           <input type="checkbox" value="${r.id}" ${checked} />
           <span>
             <b>${r.rebate_name}</b>
-            <em>${money(r.amount)} · ${mustQualify} · Expires ${r.expires_at || "Unknown"}</em>
+            <em>${money(r.amount)} · ${mustQualify} · ${verified} · Expires ${r.expires_at || "Unknown"}</em>
           </span>
         </label>
       `;
@@ -275,44 +247,28 @@ function renderRebateOptions() {
     .join("");
 }
 
-function renderProgramPreview(dealType) {
+function renderProgramPreview() {
   const box = document.getElementById("programPreview");
   box.classList.remove("hidden");
 
-  if (dealType === "purchase") {
-    if (!financeProgram) {
-      box.innerHTML = `<b>Purchase Program:</b> No manufacturer finance program loaded.`;
-      return;
-    }
-
-    box.innerHTML = `
-      <b>Purchase Program:</b>
-      <span>${financeProgram.apr}% APR up to ${financeProgram.term} months</span>
-      <span>${financeProgram.program_name || "For well-qualified buyers"}</span>
-      <span>Expires ${financeProgram.expires_at || "Unknown"}</span>
-    `;
-    return;
-  }
-
   if (!leaseProgramPreview) {
-    box.innerHTML = `<b>Lease Program:</b> Residual and Tier 1 MF not loaded yet.`;
+    box.innerHTML = `<b>Lease Program:</b> <span>Residual and Tier 1 MF not loaded yet.</span>`;
     return;
   }
+
+  const verified = leaseProgramPreview.verified ? "Verified" : "Not verified";
 
   box.innerHTML = `
     <b>Lease Program:</b>
     <span>Residual ${leaseProgramPreview.residual_percent}%</span>
     <span>Tier 1 MF ${leaseProgramPreview.money_factor}</span>
+    <span>${verified}</span>
     <span>Expires ${leaseProgramPreview.expires_at || "Unknown"}</span>
   `;
 }
 
 function getCheckedValues(name) {
   return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((x) => x.value);
-}
-
-function getSelectedFeatures() {
-  return getCheckedValues("feature");
 }
 
 function getSelectedExteriorColors() {
@@ -329,15 +285,25 @@ function getSelectedRebates() {
     .filter(Boolean);
 }
 
-function toggleDealType() {
-  const dealType = document.getElementById("dealType").value;
-  const leaseFields = document.querySelectorAll(".lease-only");
+function applyFilters() {
+  renderVehicles();
+}
 
-  leaseFields.forEach((field) => {
-    field.style.display = dealType === "lease" ? "block" : "none";
-  });
+function matchesLocalFilters(v) {
+  const exterior = getSelectedExteriorColors();
+  const interior = getSelectedInteriorColors();
 
-  renderProgramPreview(dealType);
+  const extOk =
+    !exterior.length ||
+    exterior.includes("Any") ||
+    exterior.some((c) => String(v.exterior_color || "").toLowerCase().includes(c.toLowerCase()));
+
+  const intOk =
+    !interior.length ||
+    interior.includes("Any") ||
+    interior.some((c) => String(v.interior_color || "").toLowerCase().includes(c.toLowerCase()));
+
+  return extOk && intOk;
 }
 
 async function scanBackendInventory() {
@@ -356,7 +322,7 @@ async function scanBackendInventory() {
     radius: Number(document.getElementById("radius").value),
     registrationState: document.getElementById("registrationState").value,
 
-    dealType: document.getElementById("dealType").value,
+    dealType: "lease",
     creditScoreRange: document.getElementById("creditScoreRange").value,
 
     brand: document.getElementById("brand").value,
@@ -370,7 +336,6 @@ async function scanBackendInventory() {
     exteriorColors: getSelectedExteriorColors(),
     interiorColors: getSelectedInteriorColors(),
 
-    features: getSelectedFeatures(),
     selectedRebates: getSelectedRebates(),
   };
 
@@ -410,50 +375,33 @@ async function scanBackendInventory() {
     document.getElementById("programStatus").textContent = "Error";
   } finally {
     btn.disabled = false;
-    btn.textContent = "Search Deals";
+    btn.textContent = "Search Lease Deals";
   }
 }
 
 function renderProgramStatus(data) {
   const box = document.getElementById("programBox");
   const status = document.getElementById("programStatus");
-  const dealType = document.getElementById("dealType").value;
+  const program = data.lease_program;
 
   box.classList.remove("hidden");
 
-  if (dealType === "purchase") {
-    const finance = data.finance_program;
-
-    if (!finance || !finance.verified) {
-      status.textContent = "APR not loaded";
-      box.innerHTML = `<div><b>Purchase Program:</b><span>No manufacturer APR program loaded.</span></div>`;
-      return;
-    }
-
-    status.textContent = "APR loaded";
+  if (!program || !program.verified) {
+    status.textContent = "Not verified";
     box.innerHTML = `
       <div>
-        <b>Purchase Program</b>
-        <span>${finance.apr}% APR up to ${finance.term} months</span>
-        <span>${finance.program_name || "For well-qualified buyers"}</span>
-        <span>Expires ${finance.expires_at || "Unknown"}</span>
+        <b>Lease Program</b>
+        <span>Residual / Tier 1 MF not verified from source yet.</span>
       </div>
     `;
     return;
   }
 
-  const program = data.lease_program;
-
-  if (!program || !program.verified) {
-    status.textContent = "Not verified";
-    box.innerHTML = `<div><b>Lease Program:</b><span>Residual and Tier 1 MF not loaded.</span></div>`;
-    return;
-  }
-
   status.textContent = "Verified";
+
   box.innerHTML = `
     <div>
-      <b>Lease Program</b>
+      <b>Lease Program Verified</b>
       <span>Residual ${program.residual_percent}%</span>
       <span>Tier 1 MF ${program.money_factor}</span>
       <span>Expires ${program.expires_at || "Unknown"}</span>
@@ -466,6 +414,7 @@ function groupByDealer(list) {
 
   list
     .filter((v) => !removedVins.has(v.vin))
+    .filter(matchesLocalFilters)
     .forEach((v) => {
       const dealerName = v.dealer_name || "Dealer";
       if (!grouped[dealerName]) grouped[dealerName] = [];
@@ -477,7 +426,7 @@ function groupByDealer(list) {
 
 function renderVehicles() {
   const list = document.getElementById("vehicleList");
-  const visibleVehicles = vehicles.filter((v) => !removedVins.has(v.vin));
+  const visibleVehicles = vehicles.filter((v) => !removedVins.has(v.vin)).filter(matchesLocalFilters);
 
   if (!visibleVehicles.length) {
     list.innerHTML = `<div class="empty-box">No vehicles found.</div>`;
@@ -511,12 +460,12 @@ function renderVehicles() {
 
 function renderVehicleCard(v) {
   const raw = v.raw_data || {};
-  const payment = Number(v.estimated_payment || 0);
+  const basePayment = Number(v.base_monthly_payment || v.estimated_payment || 0);
   const dealerAddons = Number(v.dealer_addons_amount || v.junk_fee || raw.addon_total || 0);
-  const detectedSavings = Number(raw.detected_savings || 0);
-  const dealType = v.deal_type || document.getElementById("dealType").value;
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
   const isFavorite = favoriteVins.has(v.vin);
+  const showInvoice = v.invoice_verified && Number(v.invoice_price || 0) > 0;
+  const downInputId = `down_${v.vin}`;
 
   return `
     <div class="vehicle-card" draggable="true" data-vin="${v.vin}">
@@ -537,7 +486,6 @@ function renderVehicleCard(v) {
             <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""}</h3>
             <p class="trim-line">${v.trim || ""}</p>
           </div>
-          <span class="score-badge">Score ${Math.round(v.score || 0)}</span>
         </div>
 
         <div class="color-row">
@@ -548,29 +496,32 @@ function renderVehicleCard(v) {
         <div class="price-box">
           <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
           <div><span>Dealer Price</span><b>${money(v.sale_price)}</b></div>
-          <div><span>Dealer Savings</span><b>${money(detectedSavings)}</b></div>
-          <div><span>Rebates</span><b>${money(v.manufacturer_rebate || 0)}</b></div>
-          <div><span>Invoice</span><b>${v.invoice_verified ? money(v.invoice_price) : "Not available"}</b></div>
-          <div><span>Over Invoice</span><b>${v.invoice_verified ? money(v.profit_over_invoice) : "N/A"}</b></div>
+          <div><span>Dealer Discount</span><b>${money(v.dealer_discount || 0)}</b></div>
+          <div><span>Rebates Applied</span><b>${money(v.manufacturer_rebate || 0)}</b></div>
+          ${showInvoice ? `<div><span>Invoice</span><b>${money(v.invoice_price)}</b></div>` : ""}
+          ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
+          <div><span>Sales Tax Est.</span><b>${money(v.estimated_tax || 0)}</b></div>
+          <div><span>Tax Rule</span><b>${v.tax_rule || "Estimate"}</b></div>
           <div class="${docFeeHigh ? "fee-bad" : ""}"><span>Doc Fee</span><b>${money(v.doc_fee || 0)}</b></div>
-          ${
-            dealType === "lease"
-              ? `
-                <div><span>Residual</span><b>${v.residual_percent ? `${v.residual_percent}%` : "Verify"}</b></div>
-                <div><span>Tier 1 MF</span><b>${v.money_factor ? v.money_factor : "Verify"}</b></div>
-                <div><span>Est. Payment</span><b>${payment ? money(payment) + "/mo" : "Verify"}</b></div>
-              `
-              : `
-                <div><span>Special APR</span><b>${v.purchase_apr ? `${v.purchase_apr}%` : "Verify"}</b></div>
-                <div><span>APR Term</span><b>${v.purchase_apr_term ? `${v.purchase_apr_term} mo` : "Verify"}</b></div>
-                <div><span>Program</span><b>${v.purchase_program_note || "For qualified buyers"}</b></div>
-              `
-          }
+          <div><span>Acquisition Fee</span><b>${money(v.acquisition_fee || 0)}</b></div>
+          <div><span>Residual</span><b>${v.residual_percent ? `${v.residual_percent}%` : "Verify"}</b></div>
+          <div><span>Tier 1 MF</span><b>${v.money_factor ? v.money_factor : "Verify"}</b></div>
+          <div><span>Est. Payment</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
+          <div><span>Due at Signing</span><b id="due_${v.vin}">${money(v.due_at_signing || basePayment || 0)}</b></div>
+        </div>
+
+        <div class="down-box">
+          <label>Adjust Down Payment</label>
+          <div>
+            <input id="${downInputId}" type="number" value="0" min="0" oninput="recalculatePayment('${v.vin}')" />
+            <button onclick="recalculatePayment('${v.vin}')">Recalculate</button>
+          </div>
+          <small>$0 down shows payment with first payment due at signing.</small>
         </div>
 
         <div class="formula-box">
-          <b>Dealer Savings Explained</b>
-          <span>${v.dealer_savings_explanation || "Dealer savings = MSRP minus dealer advertised price. Rebates and add-ons shown separately when detected."}</span>
+          <b>Lease Calculation Basis</b>
+          <span>${v.lease_calc?.explanation || "MSRP, dealer price, rebates, residual, MF, tax, acquisition fee, doc fee, and add-ons are used when available."}</span>
         </div>
 
         ${
@@ -590,9 +541,9 @@ function renderVehicleCard(v) {
           ${
             raw.available_rebates?.length
               ? raw.available_rebates
-                  .map((r) => `<span>${r.rebate_name}: ${money(r.amount)}${r.customer_must_qualify ? " · must qualify" : ""}</span>`)
+                  .map((r) => `<span>${r.rebate_name}: ${money(r.amount)}${r.customer_must_qualify ? " · must qualify" : ""}${r.verified ? " · verified" : " · not verified"}</span>`)
                   .join("")
-              : `<span>No extra rebate programs loaded.</span>`
+              : `<span>No rebate programs loaded.</span>`
           }
         </div>
 
@@ -600,8 +551,8 @@ function renderVehicleCard(v) {
           ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">Dealer Listing</a>` : ""}
           ${
             v.window_sticker_url
-              ? `<a href="${v.window_sticker_url}" target="_blank">Window Sticker</a>`
-              : `<button disabled>Sticker N/A</button>`
+              ? `<a href="${v.window_sticker_url}" target="_blank">Window Sticker PDF</a>`
+              : `<button disabled>Sticker PDF N/A</button>`
           }
           <button onclick="sendBidRequest('${v.vin || ""}')">Send Bid Request</button>
           <button onclick="copyMessage('${v.vin || ""}')">Copy Message</button>
@@ -609,6 +560,23 @@ function renderVehicleCard(v) {
       </div>
     </div>
   `;
+}
+
+function recalculatePayment(vin) {
+  const v = vehicles.find((x) => x.vin === vin);
+  if (!v) return;
+
+  const down = Number(document.getElementById(`down_${vin}`)?.value || 0);
+  const term = Number(v.term || 36);
+  const base = Number(v.base_monthly_payment || v.estimated_payment || 0);
+
+  if (!base || !term) return;
+
+  const newPayment = Math.max(0, base - down / term);
+  const due = newPayment + down;
+
+  document.getElementById(`pay_${vin}`).textContent = money(newPayment) + "/mo";
+  document.getElementById(`due_${vin}`).textContent = money(due);
 }
 
 function toggleFavorite(vin) {
@@ -626,6 +594,24 @@ function removeVehicle(vin) {
   renderVehicles();
 }
 
+function getTradeData() {
+  return {
+    trade_vin: document.getElementById("tradeVin").value.trim(),
+    license_plate: document.getElementById("tradePlate").value.trim(),
+    plate_state: document.getElementById("tradePlateState").value.trim(),
+    mileage: Number(document.getElementById("tradeMileage").value || 0),
+    condition: document.getElementById("tradeCondition").value,
+    payoff_amount: Number(document.getElementById("tradePayoff").value || 0),
+    payments_left: Number(document.getElementById("tradePaymentsLeft").value || 0),
+    monthly_payment: Number(document.getElementById("tradeMonthlyPayment").value || 0),
+    kbb_low: 0,
+    kbb_average: 0,
+    kbb_high: 0,
+    kbb_verified: false,
+    kbb_source: "pending_kbb_api",
+  };
+}
+
 async function sendBidRequest(vin) {
   const v = vehicles.find((x) => x.vin === vin);
 
@@ -638,7 +624,7 @@ async function sendBidRequest(vin) {
 
     zip_code: document.getElementById("zipCode").value.trim(),
     registration_state: document.getElementById("registrationState").value,
-    deal_type: document.getElementById("dealType").value,
+    deal_type: "lease",
     credit_score_range: document.getElementById("creditScoreRange").value,
 
     brand: v.brand,
@@ -648,12 +634,12 @@ async function sendBidRequest(vin) {
     interior_color: v.interior_color,
 
     selected_features: {
-      features: getSelectedFeatures(),
       selected_rebates: getSelectedRebates(),
       vin: v.vin,
       dealer_name: v.dealer_name,
       listing_url: v.listing_url,
       favorite: favoriteVins.has(v.vin),
+      trade_in: getTradeData(),
     },
 
     selected_vins: [v.vin],
@@ -690,8 +676,6 @@ function copyMessage(vin) {
 
   if (!v) return;
 
-  const dealType = document.getElementById("dealType").value;
-
   const message = `
 Hello,
 
@@ -703,19 +687,19 @@ Exterior: ${v.exterior_color || ""}
 Interior: ${v.interior_color || ""}
 Dealer listing: ${v.listing_url || ""}
 
-Deal type: ${dealType}
+Lease term: ${document.getElementById("term").value} months
+Miles: ${document.getElementById("miles").value} miles/year
 Credit score range: ${document.getElementById("creditScoreRange").value}
 
-${dealType === "lease" ? `Lease term: ${document.getElementById("term").value} months
-Miles: ${document.getElementById("miles").value} miles/year` : "Please include manufacturer special APR options."}
-
-Please send your best offer and break out:
+Please send your best lease offer and break out:
 Selling price before rebates
 Dealer discount
 All rebates
 Dealer add-ons/accessories
 Doc fee
-${dealType === "lease" ? "Residual\nTier 1 money factor" : "Manufacturer APR\nAPR term"}
+Acquisition fee
+Residual
+Tier 1 money factor
 Taxes and registration
 Total due at signing
 Monthly payment
@@ -729,9 +713,7 @@ Thank you.
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadCatalog();
-  await loadAllFeatures();
   await loadAllColors();
-  toggleDealType();
-  refreshModelFilters();
+  await refreshModelFilters();
   renderVehicles();
 });
