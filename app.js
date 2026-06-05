@@ -38,6 +38,19 @@ function setConnectionStatus(status, text) {
   el.textContent = text;
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function sameText(a, b) {
+  return normalizeText(a) === normalizeText(b);
+}
+
+function setResultsSource(text) {
+  const el = document.getElementById("resultsSource");
+  if (el) el.textContent = text || "";
+}
+
 async function supabaseGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: authHeaders(),
@@ -56,6 +69,50 @@ async function verifySupabaseConnection() {
   setConnectionStatus("checking", "Checking");
   await supabaseGet("dealers?select=id&limit=1");
   setConnectionStatus("connected", "Connected");
+}
+
+function normalizeCachedVehicle(v) {
+  const raw = v.raw_data || {};
+
+  return {
+    ...v,
+    dealer_name: v.dealer_name || raw.dealer_name,
+    dealer_city: v.dealer_city || raw.dealer_city,
+    dealer_state: v.dealer_state || raw.dealer_state,
+    dealer_distance_miles: Number(v.dealer_distance_miles || raw.dealer_distance_miles || 0),
+    dealer_addons_amount: v.dealer_addons_amount || raw.addon_total || 0,
+    listing_url: v.listing_url || raw.card_json?.VehicleCard?.VehicleDetailUrl || "",
+    window_sticker_url: v.window_sticker_url || raw.window_sticker_url || "",
+    image_url:
+      v.image_url ||
+      raw.card_json?.VehicleCard?.VehicleImageModel?.VehiclePhotoSrc ||
+      "",
+  };
+}
+
+function cachedVehicleMatches(v, body) {
+  const distance = Number(v.dealer_distance_miles || 0);
+  const trimOk = body.trim === "Any" || sameText(v.trim, body.trim);
+  const radiusOk = !distance || distance <= Number(body.radius || 0);
+
+  return (
+    sameText(v.brand, body.brand) &&
+    sameText(v.model, body.model) &&
+    Number(v.year) === Number(body.year) &&
+    trimOk &&
+    radiusOk
+  );
+}
+
+async function loadCachedVehicles(body) {
+  const brand = encodeURIComponent(String(body.brand || "").toUpperCase());
+  const year = Number(body.year || 0);
+  const path =
+    `vehicles?select=*&brand=eq.${brand}&year=eq.${year}` +
+    "&order=created_at.desc&limit=100";
+
+  const cached = await supabaseGet(path);
+  return cached.map(normalizeCachedVehicle).filter((v) => cachedVehicleMatches(v, body));
 }
 
 async function loadCatalog() {
@@ -341,6 +398,7 @@ async function scanBackendInventory() {
   document.getElementById("dealerCount").textContent = "0";
   document.getElementById("vehicleCount").textContent = "0";
   document.getElementById("programStatus").textContent = "Checking";
+  setResultsSource("");
 
   const body = {
     zipCode: document.getElementById("zipCode").value.trim(),
@@ -367,9 +425,9 @@ async function scanBackendInventory() {
   try {
     const response = await fetch(SCAN_INVENTORY_URL, {
       method: "POST",
-      headers: authHeaders({
+      headers: {
         "Content-Type": "application/json",
-      }),
+      },
       body: JSON.stringify(body),
     });
 
@@ -388,6 +446,20 @@ async function scanBackendInventory() {
     }
 
     vehicles = data.vehicles || [];
+
+    if (!vehicles.length) {
+      const cachedVehicles = await loadCachedVehicles(body);
+
+      if (cachedVehicles.length) {
+        vehicles = cachedVehicles;
+        data.count = cachedVehicles.length;
+        data.dealer_count = unique(cachedVehicles.map((v) => v.dealer_name || v.dealer_id)).length;
+        setResultsSource("Showing cached Supabase inventory because the live dealer scan returned no cars.");
+      }
+    } else {
+      setResultsSource("Showing fresh live scan results.");
+    }
+
     removedVins = new Set();
 
     document.getElementById("dealerCount").textContent = data.dealer_count || 0;
