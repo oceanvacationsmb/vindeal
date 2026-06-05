@@ -26,69 +26,57 @@ const ZIP_COORDS = {
 };
 
 const STATE_TAX_RULES = {
-  SC: {
-    label: "SC Infrastructure Maintenance Fee",
-    rate: 0.05,
-    cap: 500,
-    govFees: 45,
-    note: "Estimate: 5% IMF capped at $500, plus estimated registration/title fees.",
-  },
-  NC: {
-    label: "NC Highway Use Tax",
-    rate: 0.03,
-    cap: null,
-    govFees: 90,
-    note: "Estimate: 3% highway use tax plus estimated title/registration fees.",
-  },
-  GA: {
-    label: "GA TAVT estimate",
-    rate: 0.07,
-    cap: null,
-    govFees: 120,
-    note: "Estimate: TAVT-like 7% calculation plus estimated registration fees.",
-  },
-  FL: {
-    label: "FL sales tax estimate",
-    rate: 0.06,
-    cap: null,
-    govFees: 400,
-    note: "Estimate: 6% state tax before local surtax, plus estimated tag/title fees.",
-  },
-  VA: {
-    label: "VA motor vehicle sales/use tax",
-    rate: 0.0415,
-    cap: null,
-    govFees: 120,
-    note: "Estimate: 4.15% motor vehicle sales/use tax plus estimated registration fees.",
-  },
-  NY: {
-    label: "NY state sales tax estimate",
-    rate: 0.04,
-    cap: null,
-    govFees: 175,
-    note: "Estimate: 4% state tax before county/city rates, plus estimated DMV fees.",
-  },
-  NJ: {
-    label: "NJ sales tax estimate",
-    rate: 0.06625,
-    cap: null,
-    govFees: 175,
-    note: "Estimate: 6.625% sales tax plus estimated registration/title fees.",
-  },
-  CA: {
-    label: "CA base sales/use tax estimate",
-    rate: 0.0725,
-    cap: null,
-    govFees: 450,
-    note: "Estimate: 7.25% base rate before district taxes, plus estimated DMV fees.",
-  },
-  TX: {
-    label: "TX motor vehicle sales tax",
-    rate: 0.0625,
-    cap: null,
-    govFees: 150,
-    note: "Estimate: 6.25% motor vehicle sales tax plus estimated title/registration fees.",
-  },
+  AL: { name: "Alabama", rate: 0.04 },
+  AK: { name: "Alaska", rate: 0 },
+  AZ: { name: "Arizona", rate: 0.056 },
+  AR: { name: "Arkansas", rate: 0.065 },
+  CA: { name: "California", rate: 0.0625 },
+  CO: { name: "Colorado", rate: 0.029 },
+  CT: { name: "Connecticut", rate: 0.0635 },
+  DE: { name: "Delaware", rate: 0 },
+  FL: { name: "Florida", rate: 0.06 },
+  GA: { name: "Georgia", rate: 0.04, label: "GA base sales tax estimate" },
+  HI: { name: "Hawaii", rate: 0.04 },
+  ID: { name: "Idaho", rate: 0.06 },
+  IL: { name: "Illinois", rate: 0.0625 },
+  IN: { name: "Indiana", rate: 0.07 },
+  IA: { name: "Iowa", rate: 0.06 },
+  KS: { name: "Kansas", rate: 0.065 },
+  KY: { name: "Kentucky", rate: 0.06 },
+  LA: { name: "Louisiana", rate: 0.05 },
+  ME: { name: "Maine", rate: 0.055 },
+  MD: { name: "Maryland", rate: 0.06 },
+  MA: { name: "Massachusetts", rate: 0.0625 },
+  MI: { name: "Michigan", rate: 0.06 },
+  MN: { name: "Minnesota", rate: 0.06875 },
+  MS: { name: "Mississippi", rate: 0.07 },
+  MO: { name: "Missouri", rate: 0.04225 },
+  MT: { name: "Montana", rate: 0 },
+  NE: { name: "Nebraska", rate: 0.055 },
+  NV: { name: "Nevada", rate: 0.0685 },
+  NH: { name: "New Hampshire", rate: 0 },
+  NJ: { name: "New Jersey", rate: 0.06625 },
+  NM: { name: "New Mexico", rate: 0.04875 },
+  NY: { name: "New York", rate: 0.04 },
+  NC: { name: "North Carolina", rate: 0.0475 },
+  ND: { name: "North Dakota", rate: 0.05 },
+  OH: { name: "Ohio", rate: 0.0575 },
+  OK: { name: "Oklahoma", rate: 0.045 },
+  OR: { name: "Oregon", rate: 0 },
+  PA: { name: "Pennsylvania", rate: 0.06 },
+  RI: { name: "Rhode Island", rate: 0.07 },
+  SC: { name: "South Carolina", rate: 0.05, cap: 500, label: "SC Infrastructure Maintenance Fee estimate" },
+  SD: { name: "South Dakota", rate: 0.042 },
+  TN: { name: "Tennessee", rate: 0.07 },
+  TX: { name: "Texas", rate: 0.0625 },
+  UT: { name: "Utah", rate: 0.0485 },
+  VT: { name: "Vermont", rate: 0.06 },
+  VA: { name: "Virginia", rate: 0.043 },
+  WA: { name: "Washington", rate: 0.065 },
+  WV: { name: "West Virginia", rate: 0.06 },
+  WI: { name: "Wisconsin", rate: 0.05 },
+  WY: { name: "Wyoming", rate: 0.04 },
+  DC: { name: "District of Columbia", rate: 0.06 },
 };
 
 const DEALER_ENRICHMENT = {
@@ -206,6 +194,65 @@ function setConnectionStatus(status, text) {
   el.textContent = text;
 }
 
+function showHelpTooltip(target) {
+  const text = target?.dataset?.help || "";
+  if (!text) return;
+
+  let tooltip = document.getElementById("globalHelpTooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.id = "globalHelpTooltip";
+    tooltip.className = "global-help-tooltip";
+    document.body.appendChild(tooltip);
+  }
+
+  tooltip.textContent = text;
+  tooltip.classList.add("visible");
+
+  const rect = target.getBoundingClientRect();
+  const margin = 12;
+  const width = Math.min(320, window.innerWidth - margin * 2);
+  tooltip.style.maxWidth = `${width}px`;
+
+  const tooltipRect = tooltip.getBoundingClientRect();
+  let left = rect.left + rect.width / 2 - tooltipRect.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
+  let top = rect.bottom + 9;
+
+  if (top + tooltipRect.height > window.innerHeight - margin) {
+    top = rect.top - tooltipRect.height - 9;
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${Math.max(margin, top)}px`;
+}
+
+function hideHelpTooltip() {
+  document.getElementById("globalHelpTooltip")?.classList.remove("visible");
+}
+
+function initHelpTooltips() {
+  document.addEventListener("mouseover", (event) => {
+    const tip = event.target.closest(".help-tip");
+    if (tip) showHelpTooltip(tip);
+  });
+
+  document.addEventListener("focusin", (event) => {
+    const tip = event.target.closest(".help-tip");
+    if (tip) showHelpTooltip(tip);
+  });
+
+  document.addEventListener("mouseout", (event) => {
+    if (event.target.closest(".help-tip")) hideHelpTooltip();
+  });
+
+  document.addEventListener("focusout", (event) => {
+    if (event.target.closest(".help-tip")) hideHelpTooltip();
+  });
+
+  document.addEventListener("scroll", hideHelpTooltip, true);
+}
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -241,10 +288,12 @@ function calculateTax(taxableAmount, state) {
 
   return {
     tax,
-    govFees: rule.govFees,
-    label: rule.label,
-    note: rule.note,
+    govFees: rule.govFees || 0,
+    label: rule.label || `${rule.name || state} state sales tax estimate`,
+    note: rule.note || `Estimated with ${((rule.rate || 0) * 100).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}% state base rate. Local, county, lease, EV, registration, and dealer document rules can change final tax.`,
     rate: rule.rate,
+    cap: rule.cap || null,
+    stateName: rule.name || state,
   };
 }
 
@@ -266,6 +315,15 @@ function distanceMiles(a, b) {
 function selectedZipCoords() {
   const zip = document.getElementById("zipCode")?.value?.trim();
   return ZIP_COORDS[zip] || ZIP_COORDS["29577"];
+}
+
+function initRegistrationStates() {
+  const select = document.getElementById("registrationState");
+  if (!select) return;
+
+  select.innerHTML = Object.entries(STATE_TAX_RULES)
+    .map(([code, rule]) => `<option value="${code}" ${code === "SC" ? "selected" : ""}>${rule.name} (${code}) - ${((rule.rate || 0) * 100).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}%</option>`)
+    .join("");
 }
 
 function getDealerDistance(dealer) {
@@ -346,7 +404,6 @@ function vehicleIncentiveRows(v) {
 const PRICE_HELP = {
   msrp: "Manufacturer Suggested Retail Price. This is the sticker price from the manufacturer before dealer discount, incentives, taxes, fees, or add-ons.",
   dealerWebsitePrice: "The advertised price shown on the dealer website. Dealers may include, exclude, or condition this price with incentives, add-ons, or fine print, so VINDeal does not use it as the lease cap cost.",
-  websiteReference: "A reference copy of the dealer advertised price. It helps compare dealers, but the public lease estimate is built from MSRP, verified incentives, residual, money factor, and bank fee.",
   adjustedCapCost: "Estimated lease cap cost before dealer discount: MSRP - verified manufacturer incentive + bank acquisition fee. Dealer discount, taxes, government fees, doc fee, add-ons, and final documents are not included here.",
   manufacturerIncentive: "Public manufacturer incentive currently attached to this vehicle/program. Extra conditional incentives require buyer qualification and dealer/manufacturer verification.",
   invoice: "Dealer invoice, when verified. This is an internal wholesale-like reference and may not include holdback, marketing support, or other dealer programs.",
@@ -360,15 +417,20 @@ const PRICE_HELP = {
   baseProgram: "The basic public lease program used for this card, such as 36 months / 10,000 miles or 12,000 miles depending on the stored/loaded program.",
   estimatedMonthly: "Estimated monthly payment from public lease math: depreciation charge plus rent charge, before dealer discount, taxes, government fees, doc fee, add-ons, and final dealer documents.",
   totalPayments: "Estimated monthly payment multiplied by the base lease term. It does not include amount due at signing, taxes, registration, doc fee, dealer add-ons, or final lender/dealer changes.",
+  estimatedTax: "Estimated sales/use tax based on the selected registration state and the estimated total base lease payments. Local tax, lease tax rules, EV fees, registration, and dealer documents can change the final tax.",
+  taxRule: "The state base tax rule currently used for this estimate. This is not a final tax quote.",
 };
 
+function escapeAttr(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function helpTip(text) {
-  return `
-    <span class="help-tip" tabindex="0" aria-label="${text}">
-      ?
-      <span class="help-window">${text}</span>
-    </span>
-  `;
+  return `<button type="button" class="help-tip" data-help="${escapeAttr(text)}" aria-label="Explain this number">?</button>`;
 }
 
 function priceItem(label, value, helpKey, className = "") {
@@ -503,7 +565,7 @@ function calculateLeaseQuote(v, options = {}) {
     programStatus: program
       ? verifiedProgram
         ? "Verified manufacturer program"
-        : "Program found, not verified"
+        : "Program source pending"
       : "No base program loaded for this vehicle",
   };
 }
@@ -962,6 +1024,7 @@ function renderDealerCoverage(body) {
 
   const dealers = getDealersInRadius(body);
   const dealersWithCars = new Set(vehicles.map((v) => normalizeText(v.dealer_name)));
+  const loadedDealerCount = dealersWithCars.size;
 
   if (!dealers.length) {
     box.classList.add("hidden");
@@ -973,7 +1036,8 @@ function renderDealerCoverage(body) {
     <div class="section-head">
       <div>
         <h2>Dealers In Radius</h2>
-        <p>${dealers.length} active ${body.brand} dealers found within ${body.radius} miles. A dealer can be in range even when its inventory has not been imported yet.</p>
+        <p>${dealers.length} active ${body.brand} dealers found within ${body.radius} miles. Inventory loaded from ${loadedDealerCount} dealer${loadedDealerCount === 1 ? "" : "s"}.</p>
+        ${loadedDealerCount < dealers.length ? `<p class="coverage-warning">More dealers are in range, but their inventory rows were not returned by the scanner/importer yet.</p>` : ""}
       </div>
     </div>
     <div class="dealer-chip-grid">
@@ -1036,6 +1100,7 @@ async function scanBackendInventory() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders(),
       },
       body: JSON.stringify(body),
     });
@@ -1063,7 +1128,7 @@ async function scanBackendInventory() {
         vehicles = cachedVehicles;
         data.count = cachedVehicles.length;
         data.dealer_count = getDealersInRadius(body).length;
-        setResultsSource("Showing cached Supabase inventory because the live dealer scan returned no cars.");
+        setResultsSource("Showing cached Supabase inventory. If only one dealer has cars, the scanner/importer has not loaded the other dealers yet.");
       }
     } else {
       setResultsSource("Showing fresh live scan results.");
@@ -1102,12 +1167,17 @@ function renderProgramStatus(data) {
   const status = document.getElementById("programStatus");
   const program = data.lease_program;
 
-  if (!program || !program.verified) {
-    status.textContent = "Not verified";
+  if (!program) {
+    status.textContent = "Checked";
     return;
   }
 
-  status.textContent = "Verified";
+  if (!program.verified) {
+    status.textContent = "Source pending";
+    return;
+  }
+
+  status.textContent = "Checked";
 }
 
 function groupByDealer(list) {
@@ -1181,6 +1251,8 @@ function renderVehicleCard(v) {
   const raw = v.raw_data || {};
   const quote = calculateLeaseQuote(v);
   const basePayment = quote.monthlyPayment || Number(v.base_monthly_payment || v.estimated_payment || 0);
+  const registrationState = document.getElementById("registrationState")?.value || lastSearchBody?.registrationState || "SC";
+  const taxEstimate = calculateTax(quote.totalPayments || basePayment * quote.term || quote.adjustedCapCost, registrationState);
   const dealerAddons = detectDealerAddons(v);
   const incentiveRows = vehicleIncentiveRows(v);
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
@@ -1226,7 +1298,6 @@ function renderVehicleCard(v) {
         <div class="price-box">
           ${priceItem("MSRP", money(v.msrp), "msrp")}
           ${priceItem("Dealer Website Price", money(v.sale_price), "dealerWebsitePrice")}
-          ${priceItem("Website Price Reference", money(quote.fairMarketPrice), "websiteReference")}
           ${priceItem("Adjusted Cap Cost Est.", money(quote.adjustedCapCost), "adjustedCapCost")}
           ${priceItem("Manufacturer Incentive", quote.incentive ? money(quote.incentive) : "None found", "manufacturerIncentive")}
           ${showInvoice ? priceItem("Invoice", money(v.invoice_price), "invoice") : ""}
@@ -1240,6 +1311,18 @@ function renderVehicleCard(v) {
           ${priceItem("Base Program", `${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi`, "baseProgram")}
           ${priceItem("Estimated Monthly", basePayment ? money(basePayment) + "/mo" : "Verify", "estimatedMonthly")}
           ${priceItem("Total Payments", basePayment ? money(basePayment * quote.term) : "Verify", "totalPayments")}
+        </div>
+
+        <div class="tax-box">
+          <div>
+            <span>Estimated State Tax ${helpTip(PRICE_HELP.estimatedTax)}</span>
+            <b>${money(taxEstimate.tax)}</b>
+          </div>
+          <div>
+            <span>State Rule ${helpTip(PRICE_HELP.taxRule)}</span>
+            <b>${registrationState} - ${((taxEstimate.rate || 0) * 100).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}%${taxEstimate.cap ? ` capped at ${money(taxEstimate.cap)}` : ""}</b>
+          </div>
+          <p>${taxEstimate.note}</p>
         </div>
 
         <div class="lease-scenario">
@@ -1705,6 +1788,8 @@ Thank you.
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
+    initHelpTooltips();
+    initRegistrationStates();
     await verifySupabaseConnection();
     await loadDealers();
     await loadCatalog();

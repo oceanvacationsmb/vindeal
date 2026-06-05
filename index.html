@@ -35,30 +35,21 @@
               <div class="field">
                 <label>Radius</label>
                 <select id="radius">
+                  <option value="10" selected>10 mi</option>
                   <option value="25">25 mi</option>
                   <option value="50">50 mi</option>
                   <option value="100">100 mi</option>
                   <option value="250">250 mi</option>
                   <option value="500">500 mi</option>
                   <option value="1000">1000 mi</option>
-                  <option value="3000" selected>Nationwide</option>
+                  <option value="3000">Nationwide</option>
                 </select>
               </div>
             </div>
 
             <div class="field">
               <label>Registering State</label>
-              <select id="registrationState" onchange="loadProgramsForSelectedCar()">
-                <option value="SC" selected>South Carolina</option>
-                <option value="NC">North Carolina</option>
-                <option value="GA">Georgia</option>
-                <option value="FL">Florida</option>
-                <option value="VA">Virginia</option>
-                <option value="NY">New York</option>
-                <option value="NJ">New Jersey</option>
-                <option value="CA">California</option>
-                <option value="TX">Texas</option>
-              </select>
+              <select id="registrationState" onchange="loadProgramsForSelectedCar()"></select>
             </div>
 
             <div class="field">
@@ -344,6 +335,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=84"></script>
+  <script src="app.js?v=85"></script>
 </body>
 </html>

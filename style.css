@@ -520,6 +520,12 @@ body {
   font-weight: 800;
 }
 
+.coverage-warning {
+  margin-top: 6px !important;
+  color: #9a3412 !important;
+  font-weight: 800;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(170px, 1fr));
@@ -886,29 +892,26 @@ body {
 }
 
 .help-tip {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 17px;
   height: 17px;
   border-radius: 50%;
+  border: none;
   background: #e0f2fe;
   color: #075985;
   font-size: 11px;
   font-weight: 900;
   cursor: help;
   flex: 0 0 auto;
+  padding: 0;
 }
 
-.help-window {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 10px);
-  z-index: 30;
+.global-help-tooltip {
+  position: fixed;
+  z-index: 100;
   display: none;
-  width: min(280px, 70vw);
-  transform: translateX(-50%);
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: #0f172a;
@@ -918,21 +921,49 @@ body {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.45;
+  pointer-events: none;
 }
 
-.help-window::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translateX(-50%);
-  border: 7px solid transparent;
-  border-top-color: #0f172a;
-}
-
-.help-tip:hover .help-window,
-.help-tip:focus .help-window {
+.global-help-tooltip.visible {
   display: block;
+}
+
+.tax-box {
+  margin-top: 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.tax-box div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tax-box div + div {
+  margin-top: 8px;
+}
+
+.tax-box span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.tax-box b {
+  text-align: right;
+}
+
+.tax-box p {
+  margin: 9px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .down-box {
