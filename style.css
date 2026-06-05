@@ -82,7 +82,9 @@ body {
   font-size: 15px;
 }
 
-.filter-box {
+.filter-box,
+.trade-box,
+.contact-box {
   margin-top: 18px;
   padding: 16px;
   border: 1px solid #e2e8f0;
@@ -118,6 +120,22 @@ body {
   height: 16px;
 }
 
+.filter-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.secondary-btn {
+  border: none;
+  background: #111827;
+  color: white;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .rebate-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(260px, 1fr));
@@ -148,14 +166,11 @@ body {
   margin-top: 3px;
 }
 
-.small-note {
-  color: #64748b;
-  margin-top: -5px;
-  font-size: 13px;
-}
-
+.small-note,
+.trade-note,
 .muted {
   color: #64748b;
+  font-size: 13px;
 }
 
 .program-preview {
@@ -169,18 +184,6 @@ body {
 
 .program-preview b {
   color: #111827;
-}
-
-.contact-box {
-  margin-top: 16px;
-  padding: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-}
-
-.contact-box summary {
-  cursor: pointer;
-  font-weight: 800;
 }
 
 .contact-grid {
@@ -206,7 +209,7 @@ body {
 
 .summary-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -225,6 +228,18 @@ body {
   display: block;
   margin-top: 6px;
   font-size: 25px;
+}
+
+.connection-status.checking {
+  color: #92400e;
+}
+
+.connection-status.connected {
+  color: #14532d;
+}
+
+.connection-status.error {
+  color: #991b1b;
 }
 
 .program-box {
@@ -368,16 +383,6 @@ body {
   color: #475569;
 }
 
-.score-badge {
-  background: #dbeafe;
-  color: #1e40af;
-  border-radius: 999px;
-  padding: 7px 10px;
-  height: fit-content;
-  font-size: 12px;
-  font-weight: 900;
-}
-
 .color-row {
   display: flex;
   gap: 8px;
@@ -418,6 +423,48 @@ body {
 .price-box b {
   display: block;
   margin-top: 4px;
+}
+
+.down-box {
+  margin-top: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 11px;
+}
+
+.down-box label {
+  display: block;
+  font-weight: 900;
+  margin-bottom: 7px;
+}
+
+.down-box div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.down-box input {
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.down-box button {
+  border: none;
+  background: #111827;
+  color: white;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.down-box small {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
 }
 
 .formula-box {
