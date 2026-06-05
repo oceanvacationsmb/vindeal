@@ -4,6 +4,7 @@ const SCAN_INVENTORY_URL = `${SUPABASE_URL}/functions/v1/scan-inventory`;
 
 let vehicles = [];
 let catalog = [];
+let featuresCatalog = [];
 
 function money(value) {
   return Number(value || 0).toLocaleString("en-US", {
@@ -28,19 +29,32 @@ async function loadCatalog() {
   );
 
   catalog = await res.json();
-
   if (!Array.isArray(catalog)) catalog = [];
 
   updateBrandOptions();
+}
+
+async function loadAllFeatures() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/vehicle_features_catalog?select=brand,model,feature_name&active=eq.true&order=feature_name.asc`,
+    {
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+      },
+    }
+  );
+
+  featuresCatalog = await res.json();
+  if (!Array.isArray(featuresCatalog)) featuresCatalog = [];
+
+  loadFeatureOptions();
 }
 
 function updateBrandOptions() {
   const brandSelect = document.getElementById("brand");
   brandSelect.innerHTML = "";
 
-  const brands = unique(catalog.map((x) => x.brand));
-
-  brands.forEach((brand) => {
+  unique(catalog.map((x) => x.brand)).forEach((brand) => {
     brandSelect.innerHTML += `<option value="${brand}">${brand}</option>`;
   });
 
@@ -53,11 +67,9 @@ function updateModelOptions() {
 
   modelSelect.innerHTML = "";
 
-  const models = unique(
+  unique(
     catalog.filter((x) => x.brand === brand).map((x) => x.model)
-  );
-
-  models.forEach((model) => {
+  ).forEach((model) => {
     modelSelect.innerHTML += `<option value="${model}">${model}</option>`;
   });
 
@@ -71,17 +83,16 @@ function updateTrimOptions() {
 
   trimSelect.innerHTML = "";
 
-  const trims = unique(
+  unique(
     catalog
       .filter((x) => x.brand === brand && x.model === model)
       .map((x) => x.trim)
-  );
-
-  trims.forEach((trim) => {
+  ).forEach((trim) => {
     trimSelect.innerHTML += `<option value="${trim}">${trim}</option>`;
   });
 
   updateYearOptions();
+  loadFeatureOptions();
 }
 
 function updateYearOptions() {
@@ -91,14 +102,59 @@ function updateYearOptions() {
 
   yearSelect.innerHTML = "";
 
-  const years = unique(
+  unique(
     catalog
       .filter((x) => x.brand === brand && x.model === model)
       .map((x) => x.year)
-  ).sort((a, b) => b - a);
+  )
+    .sort((a, b) => b - a)
+    .forEach((year) => {
+      yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+    });
+}
 
-  years.forEach((year) => {
-    yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+function loadFeatureOptions() {
+  const box = document.getElementById("featureOptions");
+  const brand = document.getElementById("brand")?.value || "";
+  const model = document.getElementById("model")?.value || "";
+
+  if (!box) return;
+
+  const features = unique(
+    featuresCatalog
+      .filter((x) => x.brand === brand && x.model === model)
+      .map((x) => x.feature_name)
+  );
+
+  if (!features.length) {
+    box.innerHTML = `<span class="muted">No feature filters loaded for this model.</span>`;
+    return;
+  }
+
+  box.innerHTML = features
+    .map(
+      (feature) => `
+        <label class="check-pill">
+          <input type="checkbox" value="${feature}" />
+          <span>${feature}</span>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function getSelectedFeatures() {
+  return [...document.querySelectorAll("#featureOptions input[type='checkbox']:checked")].map(
+    (x) => x.value
+  );
+}
+
+function toggleLeaseFields() {
+  const dealType = document.getElementById("dealType").value;
+  const leaseFields = document.querySelectorAll(".lease-only");
+
+  leaseFields.forEach((field) => {
+    field.style.display = dealType === "lease" ? "block" : "none";
   });
 }
 
@@ -118,20 +174,21 @@ async function scanBackendInventory() {
     radius: Number(document.getElementById("radius").value),
     registrationState: document.getElementById("registrationState").value,
 
+    dealType: document.getElementById("dealType").value,
+    creditScoreRange: document.getElementById("creditScoreRange").value,
+
     brand: document.getElementById("brand").value,
     model: document.getElementById("model").value,
     trim: document.getElementById("trim").value,
+    year: Number(document.getElementById("year").value),
 
     term: Number(document.getElementById("term").value),
     miles: Number(document.getElementById("miles").value),
-    year: Number(document.getElementById("year").value),
 
     exteriorColor: document.getElementById("exteriorColor").value,
     interiorColor: document.getElementById("interiorColor").value,
 
-    features: {
-      notes: document.getElementById("features").value.trim(),
-    },
+    features: getSelectedFeatures(),
   };
 
   try {
@@ -182,8 +239,10 @@ function renderLeaseProgram(program) {
   if (!program || !program.verified) {
     status.textContent = "Not verified";
     box.innerHTML = `
-      <b>Lease program not verified</b>
-      <span>Residual and base MF must be confirmed before sending final offer.</span>
+      <div>
+        <b>Lease Program Not Verified</b>
+        <span>Residual and Tier 1 MF must be confirmed before final deal.</span>
+      </div>
     `;
     return;
   }
@@ -191,10 +250,12 @@ function renderLeaseProgram(program) {
   status.textContent = "Verified";
 
   box.innerHTML = `
-    <b>Lease Program</b>
-    <span>Residual: ${program.residual_percent}%</span>
-    <span>Base MF: ${program.money_factor}</span>
-    <span>Expires: ${program.expires_at || "Unknown"}</span>
+    <div>
+      <b>Lease Program</b>
+      <span>Residual: <strong>${program.residual_percent}%</strong></span>
+      <span>Tier 1 Base MF: <strong>${program.money_factor}</strong></span>
+      <span>Expires: <strong>${program.expires_at || "Unknown"}</strong></span>
+    </div>
   `;
 }
 
@@ -209,8 +270,11 @@ function renderVehicles() {
   list.innerHTML = vehicles
     .map((v) => {
       const raw = v.raw_data || {};
-      const addonItems = raw.addon_items || v.addon_items || [];
       const payment = Number(v.estimated_payment || 0);
+      const dealerAddons = Number(v.dealer_addons_amount || v.junk_fee || raw.addon_total || 0);
+      const dealerSavingsFormula =
+        v.dealer_savings_explanation ||
+        `MSRP ${money(v.msrp)} - Dealer Price ${money(v.sale_price)} = ${money(raw.detected_savings || 0)} detected savings`;
 
       return `
         <div class="vehicle-card">
@@ -223,8 +287,13 @@ function renderVehicles() {
           </div>
 
           <div class="vehicle-body">
-            <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""}</h3>
-            <p class="trim-line">${v.trim || ""}</p>
+            <div class="vehicle-top">
+              <div>
+                <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""}</h3>
+                <p class="trim-line">${v.trim || ""}</p>
+              </div>
+              <span class="score-badge">Score ${Math.round(v.score || 0)}</span>
+            </div>
 
             <div class="dealer-line">
               <b>${v.dealer_name || "Dealer"}</b>
@@ -239,39 +308,43 @@ function renderVehicles() {
             <div class="price-box">
               <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
               <div><span>Dealer Price</span><b>${money(v.sale_price)}</b></div>
-              <div><span>Savings</span><b>${money(raw.detected_savings || 0)}</b></div>
+              <div><span>Dealer Savings</span><b>${money(raw.detected_savings || 0)}</b></div>
               <div><span>Rebates</span><b>${money(v.manufacturer_rebate || 0)}</b></div>
+              <div><span>Invoice</span><b>${v.invoice_verified ? money(v.invoice_price) : "Not available"}</b></div>
+              <div><span>Over Invoice</span><b>${v.invoice_verified ? money(v.profit_over_invoice) : "N/A"}</b></div>
+              <div><span>Residual</span><b>${v.residual_percent ? `${v.residual_percent}%` : "Verify"}</b></div>
+              <div><span>Tier 1 MF</span><b>${v.money_factor ? v.money_factor : "Verify"}</b></div>
               <div><span>Doc Fee</span><b>${money(v.doc_fee || 0)}</b></div>
               <div><span>Est. Payment</span><b>${payment ? money(payment) + "/mo" : "Verify"}</b></div>
             </div>
 
+            <div class="formula-box">
+              <b>Dealer Savings Explained</b>
+              <span>${dealerSavingsFormula}</span>
+            </div>
+
             ${
-              addonItems.length
-                ? `
-                  <div class="addon-box danger">
-                    <b>Dealer Add-ons Detected</b>
-                    ${addonItems
-                      .map(
-                        (a) =>
-                          `<span>${a.name}: ${a.amount ? money(a.amount) : "Verify amount"}</span>`
-                      )
-                      .join("")}
-                  </div>
-                `
-                : `<div class="addon-box good">No clear add-ons detected</div>`
+              dealerAddons > 0
+                ? `<div class="addon-total danger">Dealer Add-ons Detected: ${money(dealerAddons)}</div>`
+                : `<div class="addon-total good">No clear dealer add-ons detected</div>`
             }
 
             <div class="program-line">
               ${
                 raw.lease_program_verified
-                  ? `Residual ${v.residual_percent}% | Base MF ${v.money_factor}`
-                  : "Residual / MF not verified"
+                  ? `Lease program found: Residual ${v.residual_percent}% | Tier 1 MF ${v.money_factor}`
+                  : "Residual / Tier 1 MF not verified"
               }
             </div>
 
             <div class="action-row">
-              ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">View Listing</a>` : ""}
-              <button onclick="inviteDealer('${v.vin || ""}')">Invite Dealer</button>
+              ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">Dealer Listing</a>` : ""}
+              ${
+                v.window_sticker_url
+                  ? `<a href="${v.window_sticker_url}" target="_blank">Window Sticker</a>`
+                  : `<button disabled>Sticker N/A</button>`
+              }
+              <button onclick="sendBidRequest('${v.vin || ""}')">Send Bid Request</button>
               <button onclick="copyMessage('${v.vin || ""}')">Copy Message</button>
             </div>
           </div>
@@ -281,8 +354,58 @@ function renderVehicles() {
     .join("");
 }
 
-function inviteDealer(vin) {
-  alert("Dealer bid system next. VIN: " + vin);
+async function sendBidRequest(vin) {
+  const v = vehicles.find((x) => x.vin === vin);
+
+  if (!v) return;
+
+  const payload = {
+    customer_name: document.getElementById("customerName").value.trim(),
+    customer_phone: document.getElementById("customerPhone").value.trim(),
+    customer_email: document.getElementById("customerEmail").value.trim(),
+
+    zip_code: document.getElementById("zipCode").value.trim(),
+    registration_state: document.getElementById("registrationState").value,
+    deal_type: document.getElementById("dealType").value,
+    credit_score_range: document.getElementById("creditScoreRange").value,
+
+    brand: v.brand,
+    model: v.model,
+    trim: v.trim,
+    exterior_color: v.exterior_color,
+    interior_color: v.interior_color,
+    selected_features: {
+      features: getSelectedFeatures(),
+      vin: v.vin,
+      dealer_name: v.dealer_name,
+      listing_url: v.listing_url,
+    },
+
+    term: Number(document.getElementById("term").value),
+    miles: Number(document.getElementById("miles").value),
+    status: "open",
+  };
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/bid_requests`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text);
+    }
+
+    alert("Bid request saved. Dealer dashboard is next.");
+  } catch (error) {
+    alert("Could not save bid request: " + error.message);
+  }
 }
 
 function copyMessage(vin) {
@@ -299,15 +422,23 @@ ${v.year || ""} ${v.brand || ""} ${v.model || ""} ${v.trim || ""}
 VIN: ${v.vin}
 Exterior: ${v.exterior_color || ""}
 Interior: ${v.interior_color || ""}
+Dealer listing: ${v.listing_url || ""}
 
-Please send your best lease offer with:
+Please send your best offer.
+
+Deal type: ${document.getElementById("dealType").value}
+Term: ${document.getElementById("term").value} months
+Miles: ${document.getElementById("miles").value} miles/year
+Credit score range: ${document.getElementById("creditScoreRange").value}
+
+Please include:
 Selling price before rebates
 Dealer discount
 All rebates
-Money factor
-Residual
-Doc fee
 Dealer add-ons
+Doc fee
+Residual
+Tier 1 money factor
 Taxes and registration
 Total due at signing
 Monthly payment
@@ -321,5 +452,7 @@ Thank you.
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadCatalog();
+  await loadAllFeatures();
+  toggleLeaseFields();
   renderVehicles();
 });
