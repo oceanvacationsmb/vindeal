@@ -529,6 +529,33 @@ body {
   border: 1px solid #e2e8f0;
 }
 
+.lease-scenario {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.program-note {
+  display: block;
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 9px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.program-note.good {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.program-note.warn {
+  background: #ffedd5;
+  color: #7c2d12;
+}
+
 .target-box label {
   display: block;
   font-weight: 900;

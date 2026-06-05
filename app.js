@@ -7,6 +7,7 @@ let catalog = [];
 let dealersCatalog = [];
 let colorsCatalog = [];
 let rebatesCatalog = [];
+let leaseProgramsCatalog = [];
 let leaseProgramPreview = null;
 let removedVins = new Set();
 let favoriteVins = new Set();
@@ -144,7 +145,7 @@ function getTradeEquity() {
 }
 
 function calculateTargetDiscount(v, targetPayment) {
-  const quote = calculateLeaseQuote(v);
+  const quote = calculateLeaseQuote(v, getCardLeaseSelection(v.vin));
   const target = number(targetPayment);
   const residual = quote.residualValue;
   const term = quote.term || 36;
@@ -305,7 +306,7 @@ function getDealerMeta(vOrDealer = {}) {
 }
 
 function dealerRatingText(meta) {
-  return meta.google_rating ? `Google ${meta.google_rating} stars` : "Google rating not connected";
+  return meta.google_rating ? `Google ${meta.google_rating} stars` : "Google Places needed";
 }
 
 function detectDealerAddons(v) {
@@ -393,19 +394,47 @@ function normalizeStickerUrl(v) {
   return "";
 }
 
-function calculateLeaseQuote(v) {
+function getCardLeaseSelection(vin) {
+  return {
+    term: Number(document.getElementById(`term_${vin}`)?.value || document.getElementById("term")?.value || 36),
+    miles: Number(document.getElementById(`miles_${vin}`)?.value || document.getElementById("miles")?.value || 10000),
+  };
+}
+
+function findLeaseProgram(v, term, miles) {
+  return (
+    leaseProgramsCatalog.find(
+      (program) =>
+        sameText(program.brand, v.brand) &&
+        sameText(program.model, v.model) &&
+        Number(program.year) === Number(v.year) &&
+        Number(program.term) === Number(term) &&
+        Number(program.miles) === Number(miles) &&
+        (sameText(program.trim, v.trim) || sameText(program.trim, "Any"))
+    ) || null
+  );
+}
+
+function programIsVerified(program) {
+  return Boolean(program && program.source && !sameText(program.source, "manual") && !String(program.source_note || "").toLowerCase().includes("temporary"));
+}
+
+function calculateLeaseQuote(v, options = {}) {
   const msrp = number(v.msrp);
-  const incentive = number(v.manufacturer_rebate);
+  const term = number(options.term || v.term || document.getElementById("term")?.value || 36);
+  const miles = number(options.miles || v.miles || document.getElementById("miles")?.value || 10000);
+  const program = findLeaseProgram(v, term, miles);
+  const verifiedProgram = programIsVerified(program);
+  const incentive = number(verifiedProgram && program.manufacturer_rebate ? program.manufacturer_rebate : v.manufacturer_rebate);
   const dealerDocFee = number(v.doc_fee);
   const bankAcquisitionFee = number(v.acquisition_fee);
   const dealerAddons = number(v.dealer_addons_amount || v.junk_fee);
   const fairMarketPrice = number(v.sale_price || v.advertised_price || msrp);
   const financeAmount = Math.max(0, fairMarketPrice - incentive + bankAcquisitionFee);
   const publicCapCost = financeAmount;
-  const residualPercent = number(v.residual_percent);
+  const residualPercent = number(program?.residual_percent || v.residual_percent);
   const residualValue = msrp * (residualPercent / 100);
-  const term = number(v.term || document.getElementById("term")?.value || 36);
-  const moneyFactor = number(v.money_factor);
+  const moneyFactor = number(program?.money_factor || v.money_factor);
   const depreciation = term ? Math.max(0, publicCapCost - residualValue) / term : 0;
   const financeCharge = (publicCapCost + residualValue) * moneyFactor;
   const monthlyPayment = depreciation + financeCharge;
@@ -423,6 +452,16 @@ function calculateLeaseQuote(v) {
     residualValue,
     monthlyPayment,
     term,
+    miles,
+    totalPayments: monthlyPayment * term,
+    program,
+    programFound: Boolean(program),
+    programVerified: verifiedProgram,
+    programStatus: program
+      ? verifiedProgram
+        ? "Verified manufacturer program"
+        : "Program found, not verified"
+      : "No program loaded for this term/miles",
   };
 }
 
@@ -517,6 +556,12 @@ async function loadCatalog() {
 async function loadAllColors() {
   colorsCatalog = await supabaseGet(
     "vehicle_color_catalog?select=brand,model,trim,year,color_type,color_name&active=eq.true&order=color_name.asc"
+  );
+}
+
+async function loadAllLeasePrograms() {
+  leaseProgramsCatalog = await supabaseGet(
+    "lease_programs?select=*&active=eq.true&order=created_at.desc"
   );
 }
 
@@ -1137,15 +1182,34 @@ function renderVehicleCard(v) {
           <div><span>Bank Acquisition Fee</span><b>${money(v.acquisition_fee || 0)}</b></div>
           <div><span>Known Add-ons</span><b>${dealerAddons ? money(dealerAddons) : "None found"}</b></div>
           <div><span>Residual</span><b>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</b></div>
-          <div><span>Residual Value</span><b>${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
-          <div><span>Tier 1 MF</span><b>${v.money_factor ? `${v.money_factor} (${moneyFactorApr(v.money_factor)})` : "Verify"}</b></div>
-          <div><span>Public Base Estimate</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
+          <div><span>Residual Value</span><b id="residual_value_${v.vin}">${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
+          <div><span>Tier 1 MF</span><b id="mf_${v.vin}">${quote.monthlyPayment ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify"}</b></div>
+          <div><span>Estimated Monthly</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
+          <div><span>Total Payments</span><b id="total_pay_${v.vin}">${basePayment ? money(basePayment * quote.term) : "Verify"}</b></div>
+        </div>
+
+        <div class="lease-scenario">
+          <div class="mini-grid">
+            <div class="field">
+              <label>Term</label>
+              <select id="term_${v.vin}" onchange="updateLeaseScenario('${v.vin}')">
+                ${[24, 36, 39, 42, 48].map((term) => `<option value="${term}" ${Number(quote.term) === term ? "selected" : ""}>${term} mo</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Miles</label>
+              <select id="miles_${v.vin}" onchange="updateLeaseScenario('${v.vin}')">
+                ${[10000, 12000, 15000].map((miles) => `<option value="${miles}" ${Number(quote.miles) === miles ? "selected" : ""}>${(miles / 1000).toFixed(0)}k</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <span id="program_status_${v.vin}" class="program-note ${quote.programVerified ? "good" : "warn"}">${quote.programStatus}</span>
         </div>
 
         <div class="target-box">
           <label>Target Monthly Payment</label>
           <div class="target-row">
-            <input id="${targetInputId}" type="number" min="0" step="25" placeholder="Example 599" oninput="updateTargetPayment('${v.vin}')" />
+            <input id="${targetInputId}" type="number" min="0" max="${Math.floor(basePayment || 0)}" step="25" placeholder="Example 599" oninput="updateTargetPayment('${v.vin}')" />
             <button type="button" onclick="updateTargetPayment('${v.vin}')">Calculate</button>
           </div>
           <div id="target_result_${v.vin}" class="target-result risk-${targetResult.risk}">
@@ -1203,7 +1267,19 @@ function updateTargetPayment(vin) {
   const v = vehicles.find((x) => x.vin === vin);
   if (!v) return null;
 
-  const target = Number(document.getElementById(`target_${vin}`)?.value || 0);
+  const quote = calculateLeaseQuote(v, getCardLeaseSelection(vin));
+  const targetInput = document.getElementById(`target_${vin}`);
+  const maxTarget = Math.floor(quote.monthlyPayment || 0);
+  let target = Number(targetInput?.value || 0);
+
+  if (targetInput) {
+    targetInput.max = String(maxTarget);
+    if (target > maxTarget && maxTarget > 0) {
+      target = maxTarget;
+      targetInput.value = String(maxTarget);
+    }
+  }
+
   const result = calculateTargetDiscount(v, target);
   const box = document.getElementById(`target_result_${vin}`);
 
@@ -1214,6 +1290,7 @@ function updateTargetPayment(vin) {
         <b>${result.label}</b>
         <span>Dealer needs about ${money(result.requiredDiscount)} additional discount to reach ${money(target)}/mo.</span>
         <span>${(result.discountPercent * 100).toFixed(1)}% of MSRP. Trade equity applied: ${money(result.tradeEquity)}.</span>
+        <span>Target cannot be higher than the current estimated monthly payment of ${money(maxTarget)}/mo.</span>
       `
       : `
         <b>${result.label}</b>
@@ -1230,6 +1307,30 @@ function updateTargetPayment(vin) {
     trade_equity_applied: result.tradeEquity,
     cap_cost_after_trade_before_discount: result.currentCapCost,
   };
+}
+
+function updateLeaseScenario(vin) {
+  const v = vehicles.find((x) => x.vin === vin);
+  if (!v) return;
+
+  const quote = calculateLeaseQuote(v, getCardLeaseSelection(vin));
+  const payment = document.getElementById(`pay_${vin}`);
+  const total = document.getElementById(`total_pay_${vin}`);
+  const residual = document.getElementById(`residual_value_${vin}`);
+  const mf = document.getElementById(`mf_${vin}`);
+  const status = document.getElementById(`program_status_${vin}`);
+
+  if (payment) payment.textContent = quote.monthlyPayment ? `${money(quote.monthlyPayment)}/mo` : "Verify";
+  if (total) total.textContent = quote.monthlyPayment ? money(quote.totalPayments) : "Verify";
+  if (residual) residual.textContent = quote.residualValue ? money(quote.residualValue) : "Verify";
+  if (mf) mf.textContent = quote.program?.money_factor || v.money_factor ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify";
+  if (status) {
+    status.textContent = quote.programStatus;
+    status.className = `program-note ${quote.programVerified ? "good" : "warn"}`;
+  }
+
+  updateTargetPayment(vin);
+  renderComparePanel();
 }
 
 function renderComparePanel() {
@@ -1552,6 +1653,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadDealers();
     await loadCatalog();
     await loadAllColors();
+    await loadAllLeasePrograms();
     await refreshModelFilters();
     setSearchUiState("idle");
   } catch (error) {
