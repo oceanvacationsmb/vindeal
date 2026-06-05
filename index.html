@@ -3,322 +3,154 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VINDeal</title>
+  <title>VINDeal - Lease Deal Hunter</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <header class="app-header">
+    <div>
+      <h1>VINDeal</h1>
+      <p>Real inventory lease deal hunter</p>
+    </div>
+  </header>
 
-<header class="topbar">
-  <div>
-    <h1>VINDeal</h1>
-    <p>Find nearby lease deals by VIN, dealer, trim, color, features, rebates, and payment.</p>
-  </div>
+  <main class="container">
+    <section class="card">
+      <h2>Search Inventory</h2>
 
-  <div class="top-buttons">
-    <button class="btn light" onclick="loadDemoCars()">Load Demo</button>
-    <button class="btn red" onclick="clearAll()">Clear All</button>
-  </div>
-</header>
+      <div class="grid">
+        <div class="field">
+          <label>ZIP Code</label>
+          <input id="zipCode" value="29577" />
+        </div>
 
-<main class="container">
+        <div class="field">
+          <label>Radius</label>
+          <input id="radius" type="number" value="250" />
+        </div>
 
-  <section class="card">
-    <h2>1. Search Nearby Cars</h2>
+        <div class="field">
+          <label>Brand</label>
+          <select id="brand">
+            <option value="Hyundai" selected>Hyundai</option>
+          </select>
+        </div>
 
-    <div class="grid">
-      <div>
-        <label>Your ZIP Code</label>
-        <input id="zipCode" value="29577" placeholder="29577" />
-      </div>
+        <div class="field">
+          <label>Model</label>
+          <input id="model" value="IONIQ 9" />
+        </div>
 
-      <div>
-        <label>Search Radius</label>
-        <div class="radio-row">
-          <label><input type="radio" name="radius" value="25" /> 25 mi</label>
-          <label><input type="radio" name="radius" value="50" checked /> 50 mi</label>
-          <label><input type="radio" name="radius" value="100" /> 100 mi</label>
-          <label><input type="radio" name="radius" value="250" /> 250 mi</label>
-          <label><input type="radio" name="radius" value="500" /> 500 mi</label>
+        <div class="field">
+          <label>Trim</label>
+          <select id="trim">
+            <option value="Any" selected>Any</option>
+            <option value="S">S</option>
+            <option value="SE">SE</option>
+            <option value="SEL">SEL</option>
+            <option value="Limited">Limited</option>
+            <option value="Performance Limited">Performance Limited</option>
+            <option value="Calligraphy">Calligraphy</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Year</label>
+          <input id="year" type="number" value="2026" />
+        </div>
+
+        <div class="field">
+          <label>Exterior Color</label>
+          <input id="exteriorColor" value="Any" />
+        </div>
+
+        <div class="field">
+          <label>Interior Color</label>
+          <input id="interiorColor" value="Any" />
         </div>
       </div>
 
-      <div>
-        <label>Brand</label>
-        <select id="brand" onchange="updateModels()">
-          <option value="Hyundai">Hyundai</option>
-          <option value="Kia">Kia</option>
-          <option value="BMW">BMW</option>
-          <option value="Genesis">Genesis</option>
-          <option value="Mercedes-Benz">Mercedes-Benz</option>
-          <option value="Toyota">Toyota</option>
-          <option value="Honda">Honda</option>
-          <option value="Lexus">Lexus</option>
-        </select>
-      </div>
+      <h3>Lease Program</h3>
 
-      <div>
-        <label>Model</label>
-        <select id="model" onchange="updateTrims()"></select>
-      </div>
+      <div class="grid">
+        <div class="field">
+          <label>Manufacturer Rebate</label>
+          <input id="manufacturerRebate" type="number" value="10000" />
+        </div>
 
-      <div>
-        <label>Trim</label>
-        <select id="trim"></select>
-      </div>
+        <div class="field">
+          <label>Lease Cash</label>
+          <input id="leaseCash" type="number" value="0" />
+        </div>
 
-      <div>
-        <label>Year</label>
-        <select id="year">
-          <option>2026</option>
-          <option>2025</option>
-          <option>2024</option>
-        </select>
-      </div>
-    </div>
+        <div class="field">
+          <label>EV Credit</label>
+          <input id="evCredit" type="number" value="0" />
+        </div>
 
-    <div class="section-title">Color Preference</div>
+        <div class="field">
+          <label>Loyalty Cash</label>
+          <input id="loyaltyCash" type="number" value="0" />
+        </div>
 
-    <div class="radio-row">
-      <label><input type="radio" name="color" value="Any" checked /> Any</label>
-      <label><input type="radio" name="color" value="Gray" /> Gray</label>
-      <label><input type="radio" name="color" value="White" /> White</label>
-      <label><input type="radio" name="color" value="Black" /> Black</label>
-      <label><input type="radio" name="color" value="Silver" /> Silver</label>
-      <label><input type="radio" name="color" value="Blue" /> Blue</label>
-    </div>
+        <div class="field">
+          <label>Residual %</label>
+          <input id="residualPercent" type="number" value="58" />
+        </div>
 
-    <div class="section-title">Interior Preference</div>
+        <div class="field">
+          <label>Money Factor</label>
+          <input id="moneyFactor" type="number" step="0.00001" value="0.00222" />
+        </div>
 
-    <div class="radio-row">
-      <label><input type="radio" name="interior" value="Any" checked /> Any</label>
-      <label><input type="radio" name="interior" value="Gray" /> Gray</label>
-      <label><input type="radio" name="interior" value="Black" /> Black</label>
-      <label><input type="radio" name="interior" value="Beige" /> Beige</label>
-      <label><input type="radio" name="interior" value="Brown" /> Brown</label>
-    </div>
+        <div class="field">
+          <label>Term</label>
+          <input id="term" type="number" value="36" />
+        </div>
 
-    <div class="section-title">Must-Have Features</div>
-
-    <div class="checks">
-      <label><input type="checkbox" id="fSunroof" /> Sunroof</label>
-      <label><input type="checkbox" id="fPanoramic" /> Panoramic Roof</label>
-      <label><input type="checkbox" id="fHeatedWheel" /> Heated Wheel</label>
-      <label><input type="checkbox" id="fCaptain" /> Captain Chairs</label>
-      <label><input type="checkbox" id="fVentSeats" /> Ventilated Seats</label>
-      <label><input type="checkbox" id="fHud" /> HUD</label>
-      <label><input type="checkbox" id="fAwd" /> AWD</label>
-      <label><input type="checkbox" id="fTow" /> Tow Package</label>
-    </div>
-
-    <div class="actions">
-      <button class="btn blue" onclick="searchNearby()">Search Nearby Dealers</button>
-      <button class="btn gray" onclick="openManufacturerOffers()">Open Manufacturer Offers</button>
-    </div>
-
-    <div class="hint">
-      This GitHub version opens dealer/manufacturer search pages. Real dealer scanning will need Supabase Edge Functions later.
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>2. Current Manufacturer Rebate / Incentive</h2>
-
-    <div class="rebate-box">
-      <div>
-        <strong>Current Rebate Source</strong>
-        <p id="rebateSourceText">Official manufacturer offer page / dealer offer page</p>
-      </div>
-
-      <div>
-        <strong>Current Known Cash / Lease Incentive</strong>
-        <p id="currentRebateText">Enter current rebate manually, then verify with dealer</p>
-      </div>
-
-      <div>
-        <strong>Expiration</strong>
-        <p id="rebateExpireText">Check offer page before sending quote</p>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div>
-        <label>Manufacturer Rebate</label>
-        <input id="manufacturerRebate" type="number" value="10000" />
-      </div>
-
-      <div>
-        <label>Lease Cash</label>
-        <input id="leaseCash" type="number" value="0" />
-      </div>
-
-      <div>
-        <label>EV Credit / Bonus</label>
-        <input id="evCredit" type="number" value="0" />
-      </div>
-
-      <div>
-        <label>Loyalty / Conquest</label>
-        <input id="loyaltyCash" type="number" value="0" />
-      </div>
-
-      <div>
-        <label>Rebate Expiration</label>
-        <input id="rebateExpiration" placeholder="Verify" />
-      </div>
-
-      <div>
-        <label>Rebate Link</label>
-        <input id="rebateLink" value="https://www.hyundaiusa.com/us/en/offers" />
-      </div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>3. Add Found Vehicle</h2>
-
-    <div class="grid">
-      <div>
-        <label>VIN</label>
-        <div class="vin-row">
-          <input id="vin" placeholder="Paste VIN here" />
-          <button class="btn blue small-btn" onclick="decodeVin()">Decode</button>
+        <div class="field">
+          <label>Miles</label>
+          <input id="miles" type="number" value="10000" />
         </div>
       </div>
 
-      <div>
-        <label>Dealer Listing Link</label>
-        <input id="listingLink" placeholder="Paste dealer vehicle link here" />
+      <button class="search-btn" onclick="scanBackendInventory()">Scan Dealers</button>
+    </section>
+
+    <section class="summary-grid">
+      <div class="summary-card">
+        <span>Total Vehicles</span>
+        <strong id="totalVehicles">0</strong>
       </div>
 
-      <div>
-        <label>Dealer Name</label>
-        <input id="dealerName" placeholder="Hyundai of Columbia" />
+      <div class="summary-card">
+        <span>Best Payment</span>
+        <strong id="bestPayment">$0</strong>
       </div>
 
-      <div>
-        <label>Dealer City</label>
-        <input id="dealerCity" placeholder="Columbia" />
+      <div class="summary-card">
+        <span>Best Discount</span>
+        <strong id="bestDiscount">$0</strong>
       </div>
 
-      <div>
-        <label>Dealer State</label>
-        <input id="dealerState" placeholder="SC" />
+      <div class="summary-card">
+        <span>Avg Payment</span>
+        <strong id="avgPayment">$0</strong>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>Vehicles</h2>
+        <button onclick="clearVehicles()">Clear</button>
       </div>
 
-      <div>
-        <label>Vehicle Nickname</label>
-        <input id="vehicleName" placeholder="White Limited Gray Interior" />
+      <div id="vehiclesList" class="vehicles-list">
+        <p class="empty">No vehicles yet. Click Scan Dealers.</p>
       </div>
+    </section>
+  </main>
 
-      <div>
-        <label>MSRP</label>
-        <input id="msrp" type="number" placeholder="74020" />
-      </div>
-
-      <div>
-        <label>Dealer Discount</label>
-        <input id="dealerDiscount" type="number" placeholder="4000" />
-      </div>
-
-      <div>
-        <label>Doc Fee</label>
-        <input id="docFee" type="number" placeholder="499" />
-      </div>
-
-      <div>
-        <label>Acquisition Fee</label>
-        <input id="acqFee" type="number" placeholder="650" />
-      </div>
-
-      <div>
-        <label>DMV / Tag / Title</label>
-        <input id="dmvFee" type="number" placeholder="300" />
-      </div>
-
-      <div>
-        <label>Dealer Add-ons / Junk Fees</label>
-        <input id="junkFee" type="number" placeholder="0" />
-      </div>
-
-      <div>
-        <label>Residual %</label>
-        <input id="residual" type="number" placeholder="58" />
-      </div>
-
-      <div>
-        <label>Money Factor</label>
-        <input id="mf" type="number" step="0.00001" placeholder="0.00222" />
-      </div>
-
-      <div>
-        <label>Term</label>
-        <select id="term">
-          <option>24</option>
-          <option selected>36</option>
-          <option>39</option>
-          <option>48</option>
-        </select>
-      </div>
-
-      <div>
-        <label>Miles / Year</label>
-        <select id="miles">
-          <option>7500</option>
-          <option selected>10000</option>
-          <option>12000</option>
-          <option>15000</option>
-        </select>
-      </div>
-
-      <div>
-        <label>Down Payment</label>
-        <input id="downPayment" type="number" value="0" />
-      </div>
-
-      <div>
-        <label>Tax %</label>
-        <input id="taxRate" type="number" value="0" />
-      </div>
-    </div>
-
-    <label>Notes</label>
-    <textarea id="notes" placeholder="Example: $1,495 protection package, dealer refused to remove, good color, waiting on full quote..."></textarea>
-
-    <div class="actions">
-      <button class="btn green" onclick="addVehicle()">Add Vehicle To Compare</button>
-      <button class="btn gray" onclick="resetAddForm()">Reset</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>4. Saved Vehicles / Best Deals</h2>
-
-    <div class="mini-filter">
-      <input id="filterText" oninput="renderVehicles()" placeholder="Filter by dealer, VIN, trim, color..." />
-
-      <select id="sortBy" onchange="renderVehicles()">
-        <option value="score">Sort by Best Score</option>
-        <option value="payment">Sort by Lowest Payment</option>
-        <option value="discount">Sort by Biggest Discount</option>
-        <option value="junk">Sort by Lowest Junk Fees</option>
-      </select>
-    </div>
-
-    <div id="dashboard"></div>
-    <div id="vehiclesList"></div>
-  </section>
-
-</main>
-
-<div id="messageModal" class="modal hidden">
-  <div class="modal-content">
-    <button class="close" onclick="closeMessage()">×</button>
-    <h2>Dealer Message</h2>
-    <textarea id="dealerMessage"></textarea>
-    <button class="btn blue" onclick="copyMessage()">Copy Message</button>
-  </div>
-</div>
-
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
