@@ -1,8 +1,7 @@
 const SUPABASE_URL = "https://lpkqtfltpeznuxallrrv.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_T2MqV-yW0lnpmDc8x-IGqA_3go3dcfW";
 const SCAN_INVENTORY_URL = `${SUPABASE_URL}/functions/v1/scan-inventory`;
 
-let vehicles = JSON.parse(localStorage.getItem("vindealVehicles") || "[]");
+let vehicles = [];
 
 const makeModelData = {
   Hyundai: {
@@ -27,27 +26,33 @@ const makeModelData = {
   },
 };
 
+function money(value) {
+  const number = Number(value || 0);
+  return number.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function numberOnly(value) {
+  return Number(value || 0).toLocaleString("en-US");
+}
+
 function updateModelOptions() {
   const brand = document.getElementById("brand").value;
   const modelSelect = document.getElementById("model");
 
+  modelSelect.innerHTML = "";
+
   const models = Object.keys(makeModelData[brand] || {});
 
-  modelSelect.innerHTML = models
-    .map((model) => `<option value="${model}">${model}</option>`)
-    .join("");
-
-  if (brand === "Hyundai") {
-    modelSelect.value = "IONIQ 9";
-  }
-
-  if (brand === "Kia") {
-    modelSelect.value = "EV9";
-  }
-
-  if (brand === "Honda") {
-    modelSelect.value = "Prologue";
-  }
+  models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    modelSelect.appendChild(option);
+  });
 
   updateTrimOptions();
 }
@@ -57,318 +62,268 @@ function updateTrimOptions() {
   const model = document.getElementById("model").value;
   const trimSelect = document.getElementById("trim");
 
+  trimSelect.innerHTML = "";
+
   const trims = makeModelData[brand]?.[model] || ["Any"];
 
-  trimSelect.innerHTML = trims
-    .map((trim) => `<option value="${trim}">${trim}</option>`)
-    .join("");
-
-  trimSelect.value = "Any";
-}
-
-function money(value) {
-  return Number(value || 0).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
+  trims.forEach((trim) => {
+    const option = document.createElement("option");
+    option.value = trim;
+    option.textContent = trim;
+    trimSelect.appendChild(option);
   });
-}
-
-function moneyMonthly(value) {
-  return Number(value || 0).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-}
-
-function getValue(id, fallback = "") {
-  return document.getElementById(id)?.value || fallback;
-}
-
-function getNumber(id, fallback = 0) {
-  return Number(document.getElementById(id)?.value || fallback);
 }
 
 async function scanBackendInventory() {
-  const searchBtn = document.querySelector(".search-btn");
+  const btn = document.getElementById("scanBtn");
 
-  if (searchBtn) {
-    searchBtn.disabled = true;
-    searchBtn.textContent = "Scanning dealers...";
-  }
+  btn.disabled = true;
+  btn.textContent = "Searching...";
+
+  document.getElementById("vehicleList").innerHTML = "";
+  document.getElementById("dealerCount").textContent = "0";
+  document.getElementById("vehicleCount").textContent = "0";
+  document.getElementById("programStatus").textContent = "Checking";
+
+  const body = {
+    zipCode: document.getElementById("zipCode").value.trim(),
+    radius: Number(document.getElementById("radius").value),
+    registrationState: document.getElementById("registrationState").value,
+
+    brand: document.getElementById("brand").value,
+    model: document.getElementById("model").value,
+    trim: document.getElementById("trim").value,
+
+    term: Number(document.getElementById("term").value),
+    miles: Number(document.getElementById("miles").value),
+
+    year: Number(document.getElementById("year").value),
+    exteriorColor: document.getElementById("exteriorColor").value,
+    interiorColor: document.getElementById("interiorColor").value,
+
+    features: {
+      notes: document.getElementById("features").value.trim(),
+    },
+  };
 
   try {
-    const body = {
-      zipCode: getValue("zipCode", "29577"),
-      radius: getNumber("radius", 250),
-      brand: getValue("brand", "Hyundai"),
-      model: getValue("model", "IONIQ 9"),
-      trim: getValue("trim", "Any"),
-      year: getNumber("year", 2026),
-      exteriorColor: getValue("exteriorColor", "Any"),
-      interiorColor: getValue("interiorColor", "Any"),
-      manufacturerRebate: getNumber("manufacturerRebate", 10000),
-      leaseCash: getNumber("leaseCash", 0),
-      evCredit: getNumber("evCredit", 0),
-      loyaltyCash: getNumber("loyaltyCash", 0),
-      residualPercent: getNumber("residualPercent", 58),
-      moneyFactor: getNumber("moneyFactor", 0.00222),
-      term: getNumber("term", 36),
-      miles: getNumber("miles", 10000),
-    };
-
     const response = await fetch(SCAN_INVENTORY_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify(body),
-});
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-    const rawText = await response.text();
+    const text = await response.text();
 
-    let data = null;
+    let data;
 
     try {
-      data = JSON.parse(rawText);
+      data = JSON.parse(text);
     } catch {
-      alert("Backend did not return JSON. Status: " + response.status + "\n\n" + rawText.slice(0, 500));
-      return;
+      throw new Error(`Backend returned non-JSON response. Status ${response.status}. ${text}`);
     }
 
     if (!response.ok || !data.ok) {
-      alert(
-        "Scan failed.\n\nStatus: " +
-          response.status +
-          "\n\nResponse:\n" +
-          JSON.stringify(data, null, 2)
-      );
-      return;
+      throw new Error(data.error || `Backend error. Status ${response.status}`);
     }
 
-    vehicles = data.vehicles.map((v) => ({
-      id: v.id,
-      vin: v.vin,
-      stock: v.stock_number || "",
-      year: v.year,
-      brand: v.brand,
-      model: v.model,
-      trim: v.trim,
-      exterior: v.exterior_color || "",
-      interior: v.interior_color || "",
-      drivetrain: v.drivetrain || "",
-      msrp: Number(v.msrp || 0),
-      salePrice: Number(v.sale_price || 0),
-      dealerDiscount: Number(v.dealer_discount || 0),
-      rebate: Number(v.manufacturer_rebate || 0),
-      docFee: Number(v.doc_fee || 0),
-      acquisitionFee: Number(v.acquisition_fee || 0),
-      junkFee: Number(v.junk_fee || 0),
-      residualPercent: Number(v.residual_percent || 0),
-      moneyFactor: Number(v.money_factor || 0),
-      term: Number(v.term || 36),
-      miles: Number(v.miles || 10000),
-      payment: Number(v.estimated_payment || 0),
-      score: Number(v.score || 0),
-      dealer: v.dealer_name || "",
-      dealerCity: v.dealer_city || "",
-      dealerState: v.dealer_state || "",
-      listingUrl: v.listing_url || "",
-      imageUrl: v.image_url || "",
-      source: "Supabase",
-    }));
+    vehicles = data.vehicles || [];
 
-    localStorage.setItem("vindealVehicles", JSON.stringify(vehicles));
+    document.getElementById("dealerCount").textContent = data.dealer_count || 0;
+    document.getElementById("vehicleCount").textContent = data.count || 0;
+
+    renderLeaseProgram(data.lease_program);
     renderVehicles();
 
-    alert(`Scan complete. Found ${data.count} vehicles.`);
   } catch (error) {
-    alert("Error scanning inventory:\n\n" + error.message);
+    alert("Search failed: " + error.message);
+    document.getElementById("programStatus").textContent = "Error";
   } finally {
-    if (searchBtn) {
-      searchBtn.disabled = false;
-      searchBtn.textContent = "Scan Dealers";
-    }
+    btn.disabled = false;
+    btn.textContent = "Search Deals";
   }
 }
 
-function renderVehicles() {
-  const list = document.getElementById("vehiclesList");
+function renderLeaseProgram(program) {
+  const box = document.getElementById("programBox");
+  const status = document.getElementById("programStatus");
 
-  if (!list) return;
-
-  if (!vehicles.length) {
-    list.innerHTML = `<p class="empty">No vehicles yet. Click Scan Dealers.</p>`;
-    updateSummary();
+  if (!program || !program.verified) {
+    status.textContent = "Not verified";
+    box.classList.remove("hidden");
+    box.innerHTML = `
+      <strong>Lease program not verified</strong>
+      <p>Residual and money factor are not confirmed yet. Dealer must confirm before final deal.</p>
+    `;
     return;
   }
 
-  vehicles.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+  status.textContent = "Verified";
+
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <strong>Lease Program Found</strong>
+    <p>
+      Residual: <b>${program.residual_percent}%</b> |
+      Base MF: <b>${program.money_factor}</b> |
+      Expires: <b>${program.expires_at || "Unknown"}</b>
+    </p>
+    <p>${program.source_note || ""}</p>
+  `;
+}
+
+function renderVehicles() {
+  const list = document.getElementById("vehicleList");
+
+  if (!vehicles.length) {
+    list.innerHTML = `
+      <div class="empty-box">
+        No vehicles found for this search.
+      </div>
+    `;
+    return;
+  }
 
   list.innerHTML = vehicles
     .map((v) => {
-      const feesWarning = Number(v.docFee || 0) > 799 || Number(v.junkFee || 0) > 0;
+      const raw = v.raw_data || {};
+      const payment = Number(v.estimated_payment || 0);
 
       return `
         <div class="vehicle-card">
           <div class="vehicle-image-wrap">
             ${
-              v.imageUrl
-                ? `<img class="vehicle-image" src="${v.imageUrl}" alt="${v.year} ${v.brand} ${v.model}" />`
+              v.image_url
+                ? `<img src="${v.image_url}" alt="${v.year || ""} ${v.brand || ""} ${v.model || ""}" />`
                 : `<div class="no-image">No Image</div>`
             }
           </div>
 
           <div class="vehicle-info">
-            <div class="vehicle-top">
-              <div>
-                <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""} ${v.trim || ""}</h3>
-                <p>${v.exterior || "Unknown exterior"} / ${v.interior || "Unknown interior"}</p>
-              </div>
-
-              <div class="payment-box">
-                <span>Est. Payment</span>
-                <strong>${moneyMonthly(v.payment)}</strong>
-              </div>
+            <div class="vehicle-title-row">
+              <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""} ${v.trim || ""}</h3>
+              <span class="score-badge">Score ${Math.round(v.score || 0)}</span>
             </div>
 
-            <div class="details-grid">
+            <p class="dealer-line">
+              ${v.dealer_name || "Dealer"} 
+              ${v.dealer_city ? " - " + v.dealer_city : ""} 
+              ${v.dealer_state ? ", " + v.dealer_state : ""}
+              ${v.dealer_distance_miles ? ` | ${v.dealer_distance_miles} miles` : ""}
+            </p>
+
+            <div class="vehicle-tags">
+              <span>Exterior: ${v.exterior_color || "Unknown"}</span>
+              <span>Interior: ${v.interior_color || "Unknown"}</span>
+              <span>VIN: ${v.vin || ""}</span>
+            </div>
+
+            <div class="price-grid">
               <div>
                 <span>MSRP</span>
                 <strong>${money(v.msrp)}</strong>
               </div>
 
               <div>
-                <span>Sale Price</span>
-                <strong>${money(v.salePrice)}</strong>
+                <span>Dealer Price</span>
+                <strong>${money(v.sale_price)}</strong>
               </div>
 
               <div>
-                <span>Dealer Discount</span>
-                <strong>${money(v.dealerDiscount)}</strong>
+                <span>Detected Savings</span>
+                <strong>${money(raw.detected_savings || 0)}</strong>
               </div>
 
               <div>
-                <span>Rebate</span>
-                <strong>${money(v.rebate)}</strong>
+                <span>Detected Rebates</span>
+                <strong>${money(v.manufacturer_rebate || 0)}</strong>
               </div>
 
-              <div class="${Number(v.docFee || 0) > 799 ? "bad-fee" : ""}">
+              <div>
                 <span>Doc Fee</span>
-                <strong>${money(v.docFee)}</strong>
-              </div>
-
-              <div class="${Number(v.junkFee || 0) > 0 ? "bad-fee" : ""}">
-                <span>Add-ons / Junk</span>
-                <strong>${money(v.junkFee)}</strong>
+                <strong>${money(v.doc_fee || 0)}</strong>
               </div>
 
               <div>
-                <span>Residual</span>
-                <strong>${v.residualPercent}%</strong>
-              </div>
-
-              <div>
-                <span>MF</span>
-                <strong>${v.moneyFactor}</strong>
+                <span>Est. Payment</span>
+                <strong>${payment ? money(payment) + "/mo" : "Not verified"}</strong>
               </div>
             </div>
 
-            ${feesWarning ? `<div class="warning">Check fees/add-ons before accepting this deal.</div>` : ""}
+            <div class="warning-line">
+              ${
+                raw.lease_program_verified
+                  ? `Residual ${v.residual_percent}% | Base MF ${v.money_factor} | Program expires ${raw.lease_program_expires_at || "Unknown"}`
+                  : "Residual and MF not verified yet."
+              }
+            </div>
 
-            <div class="vehicle-footer">
-              <div>
-                <p><strong>Dealer:</strong> ${v.dealer} ${v.dealerCity ? `- ${v.dealerCity}, ${v.dealerState}` : ""}</p>
-                <p><strong>VIN:</strong> ${v.vin}</p>
-                <p><strong>Stock:</strong> ${v.stock}</p>
-              </div>
+            ${
+              v.rebate_expiration
+                ? `<div class="rebate-line">Rebate expiration: ${v.rebate_expiration}</div>`
+                : ""
+            }
 
-              <div class="actions">
-                ${
-                  v.listingUrl
-                    ? `<a href="${v.listingUrl}" target="_blank" class="btn">View Listing</a>`
-                    : ""
-                }
-                <button onclick="copyDealerMessage('${v.id}')">Copy Message</button>
-              </div>
+            <div class="vehicle-actions">
+              ${
+                v.listing_url
+                  ? `<a href="${v.listing_url}" target="_blank">View Dealer Listing</a>`
+                  : ""
+              }
+
+              <button onclick="inviteDealer('${v.vin || ""}')">Invite Dealer to Bid</button>
+              <button onclick="copyMessage('${v.vin || ""}')">Copy Message</button>
             </div>
           </div>
         </div>
       `;
     })
     .join("");
-
-  updateSummary();
 }
 
-function updateSummary() {
-  const totalVehicles = document.getElementById("totalVehicles");
-  const bestPayment = document.getElementById("bestPayment");
-  const bestDiscount = document.getElementById("bestDiscount");
-  const avgPayment = document.getElementById("avgPayment");
-
-  if (!vehicles.length) {
-    if (totalVehicles) totalVehicles.textContent = "0";
-    if (bestPayment) bestPayment.textContent = "$0";
-    if (bestDiscount) bestDiscount.textContent = "$0";
-    if (avgPayment) avgPayment.textContent = "$0";
-    return;
-  }
-
-  const payments = vehicles.map((v) => Number(v.payment || 0)).filter((p) => p > 0);
-  const discounts = vehicles.map((v) => Number(v.dealerDiscount || 0));
-
-  const bestPay = payments.length ? Math.min(...payments) : 0;
-  const bestDisc = discounts.length ? Math.max(...discounts) : 0;
-  const avgPay = payments.length
-    ? payments.reduce((sum, p) => sum + p, 0) / payments.length
-    : 0;
-
-  if (totalVehicles) totalVehicles.textContent = vehicles.length;
-  if (bestPayment) bestPayment.textContent = moneyMonthly(bestPay);
-  if (bestDiscount) bestDiscount.textContent = money(bestDisc);
-  if (avgPayment) avgPayment.textContent = moneyMonthly(avgPay);
+function inviteDealer(vin) {
+  alert("Dealer bid request will be added next. VIN: " + vin);
 }
 
-function copyDealerMessage(id) {
-  const v = vehicles.find((item) => item.id === id);
+function copyMessage(vin) {
+  const v = vehicles.find((x) => x.vin === vin);
 
   if (!v) return;
 
-  const msg = `Hello,
+  const message = `
+Hello,
 
-I'm interested in this vehicle:
+I am interested in this vehicle:
 
-${v.year} ${v.brand} ${v.model} ${v.trim}
+${v.year || ""} ${v.brand || ""} ${v.model || ""} ${v.trim || ""}
 VIN: ${v.vin}
-Stock: ${v.stock}
-MSRP: ${money(v.msrp)}
-Advertised Price: ${money(v.salePrice)}
-Dealer Discount: ${money(v.dealerDiscount)}
+Stock: ${v.stock_number || ""}
+Exterior: ${v.exterior_color || ""}
+Interior: ${v.interior_color || ""}
 
-Please send me your best lease quote with:
-- 36 months
-- 10,000 miles per year
-- $0 down
-- Full breakdown of fees
-- Money factor
-- Residual
-- Rebates included
-- Due at signing
+Please send your best lease offer:
+Term: ${v.term} months
+Miles: ${numberOnly(v.miles)} miles per year
 
-Please also confirm if there are any dealer add-ons or required accessories.
+Please include:
+Selling price before rebates
+Dealer discount
+All rebates
+Money factor
+Residual
+Doc fee
+Acquisition fee
+Registration/taxes
+Total due at signing
+Monthly payment
 
-Thank you.`;
+Thank you.
+`.trim();
 
-  navigator.clipboard.writeText(msg);
-  alert("Dealer message copied.");
-}
-
-function clearVehicles() {
-  vehicles = [];
-  localStorage.removeItem("vindealVehicles");
-  renderVehicles();
+  navigator.clipboard.writeText(message);
+  alert("Message copied.");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
