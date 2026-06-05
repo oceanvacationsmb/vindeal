@@ -26,7 +26,7 @@ body {
 }
 
 .container {
-  max-width: 1500px;
+  max-width: 1550px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -34,8 +34,10 @@ body {
 .search-panel,
 .program-box,
 .summary-card,
+.dealer-box,
 .vehicle-card,
-.empty-box {
+.empty-box,
+.program-preview {
   background: white;
   border-radius: 18px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
@@ -80,7 +82,7 @@ body {
   font-size: 15px;
 }
 
-.feature-panel {
+.filter-box {
   margin-top: 18px;
   padding: 16px;
   border: 1px solid #e2e8f0;
@@ -88,12 +90,12 @@ body {
   background: #f8fafc;
 }
 
-.feature-title {
+.filter-title {
   font-weight: 900;
   margin-bottom: 10px;
 }
 
-.feature-grid {
+.pill-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -116,8 +118,57 @@ body {
   height: 16px;
 }
 
+.rebate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.rebate-pill {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.rebate-pill span,
+.rebate-pill em,
+.rebate-pill b {
+  display: block;
+}
+
+.rebate-pill em {
+  color: #64748b;
+  font-style: normal;
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.small-note {
+  color: #64748b;
+  margin-top: -5px;
+  font-size: 13px;
+}
+
 .muted {
   color: #64748b;
+}
+
+.program-preview {
+  margin-top: 18px;
+  padding: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.program-preview b {
+  color: #111827;
 }
 
 .contact-box {
@@ -187,10 +238,6 @@ body {
   flex-wrap: wrap;
 }
 
-.program-box b {
-  color: #111827;
-}
-
 .hidden {
   display: none;
 }
@@ -204,6 +251,40 @@ body {
   color: #64748b;
 }
 
+.dealer-results {
+  display: grid;
+  gap: 22px;
+}
+
+.dealer-box {
+  padding: 18px;
+}
+
+.dealer-box-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dealer-box-head h3 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.dealer-box-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.dealer-box-head strong {
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 9px 12px;
+  border-radius: 999px;
+}
+
 .vehicle-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(320px, 1fr));
@@ -214,11 +295,13 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .image-box {
   height: 215px;
   background: #e2e8f0;
+  position: relative;
 }
 
 .image-box img {
@@ -234,6 +317,35 @@ body {
   justify-content: center;
   color: #64748b;
   font-weight: 800;
+}
+
+.heart-btn,
+.remove-btn {
+  position: absolute;
+  top: 10px;
+  border: none;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  font-size: 19px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.heart-btn {
+  right: 52px;
+  background: white;
+  color: #9ca3af;
+}
+
+.heart-btn.active {
+  color: #dc2626;
+}
+
+.remove-btn {
+  right: 10px;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .vehicle-body {
@@ -266,14 +378,6 @@ body {
   font-weight: 900;
 }
 
-.dealer-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 14px;
-  margin-bottom: 12px;
-}
-
 .color-row {
   display: flex;
   gap: 8px;
@@ -298,6 +402,11 @@ body {
   background: #f8fafc;
   border-radius: 12px;
   padding: 10px;
+}
+
+.price-box div.fee-bad {
+  background: #fee2e2;
+  color: #7f1d1d;
 }
 
 .price-box span {
@@ -347,13 +456,22 @@ body {
   color: #14532d;
 }
 
-.program-line {
+.rebate-list {
   margin-top: 12px;
+  border-radius: 12px;
+  padding: 11px;
+  background: #f8fafc;
   font-size: 13px;
-  background: #eef2ff;
-  color: #312e81;
-  padding: 10px;
-  border-radius: 10px;
+}
+
+.rebate-list b,
+.rebate-list span {
+  display: block;
+}
+
+.rebate-list span {
+  margin-top: 5px;
+  color: #475569;
 }
 
 .action-row {
@@ -405,6 +523,10 @@ body {
 
   .form-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .rebate-grid {
+    grid-template-columns: 1fr;
   }
 }
 
