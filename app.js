@@ -11,6 +11,7 @@ let leaseProgramPreview = null;
 let removedVins = new Set();
 let favoriteVins = new Set();
 let selectedVins = new Set();
+let compareVins = new Set();
 let lastSearchBody = null;
 let activeResultFilters = {
   dealer: new Set(),
@@ -86,6 +87,29 @@ const STATE_TAX_RULES = {
     cap: null,
     govFees: 150,
     note: "Estimate: 6.25% motor vehicle sales tax plus estimated title/registration fees.",
+  },
+};
+
+const DEALER_ENRICHMENT = {
+  "autonation hyundai columbia": {
+    phone: "844-931-0114",
+    address: "310 Greystone Boulevard, Columbia, SC 29210",
+    hours: "Mon-Fri 9:00 AM-7:30 PM; Sat 9:00 AM-6:00 PM; Sun closed",
+    email: "Contact form on dealer website",
+    source: "dealer_site",
+  },
+  "pearson hyundai": {
+    phone: "(804) 616-4734",
+    address: "11701 Midlothian Turnpike, Midlothian, VA 23113",
+    hours: "Mon-Fri 8:30 AM-8:00 PM; Sat 9:00 AM-6:00 PM; Sun 12:00 PM-6:00 PM",
+    email: "Contact form on dealer website",
+    google_rating: "4.2",
+    source: "third_party_listing",
+  },
+  "vaden hyundai of brunswick": {
+    address: "5400 Altama Avenue, Brunswick, GA 31525",
+    email: "Contact form on dealer website",
+    source: "window_sticker",
   },
 };
 
@@ -259,6 +283,52 @@ function getDealersInRadius(body) {
     .sort((a, b) => number(a.distance_miles) - number(b.distance_miles));
 }
 
+function getDealerMeta(vOrDealer = {}) {
+  const dealerName = vOrDealer.dealer_name || vOrDealer.name || "";
+  const dealer = dealersCatalog.find((item) => sameText(item.name, dealerName)) || {};
+  const enrichment = DEALER_ENRICHMENT[normalizeText(dealerName)] || {};
+
+  return {
+    ...dealer,
+    ...enrichment,
+    name: dealerName || dealer.name || "Dealer",
+    city: vOrDealer.dealer_city || dealer.city || "",
+    state: vOrDealer.dealer_state || dealer.state || "",
+    website: vOrDealer.dealer_website || dealer.website || enrichment.website || "",
+    phone: vOrDealer.dealer_phone || dealer.phone || enrichment.phone || "",
+    email: vOrDealer.dealer_email || dealer.email || enrichment.email || "",
+    address: vOrDealer.dealer_address || dealer.address || enrichment.address || "",
+    hours: vOrDealer.dealer_hours || dealer.hours || enrichment.hours || "",
+    google_rating: vOrDealer.google_rating || dealer.google_rating || enrichment.google_rating || "",
+    distance_miles: vOrDealer.dealer_distance_miles || vOrDealer.distance_miles || "",
+  };
+}
+
+function dealerRatingText(meta) {
+  return meta.google_rating ? `Google ${meta.google_rating} stars` : "Google rating not connected";
+}
+
+function detectDealerAddons(v) {
+  const raw = v.raw_data || {};
+  const priceLibrary = raw.price_library || {};
+  const explicit = number(v.dealer_addons_amount || v.junk_fee || raw.addon_total);
+  const accessoryTotal = number(priceLibrary.calc_accoessories || priceLibrary.calc_accessories || priceLibrary.Accessories);
+  return Math.max(explicit, accessoryTotal);
+}
+
+function conditionalIncentiveText(v) {
+  const raw = v.raw_data || {};
+  const priceLibrary = raw.price_library || {};
+  const conditional = number(
+    priceLibrary["PriceStak Line-Item Incentives - Conditional"] ||
+      priceLibrary.calc_OEM_Savings_Conditional ||
+      priceLibrary["calc_OEM Savings Conditional"]
+  );
+
+  if (!conditional) return "";
+  return `Conditional incentives detected on dealer page: ${money(conditional)}. Buyer must qualify and dealer must verify.`;
+}
+
 function normalizeStickerUrl(v) {
   if (v.window_sticker_url) return v.window_sticker_url;
 
@@ -358,7 +428,7 @@ function normalizeCachedVehicle(v) {
     dealer_city: v.dealer_city || raw.dealer_city,
     dealer_state: v.dealer_state || raw.dealer_state,
     dealer_distance_miles: Number(v.dealer_distance_miles || raw.dealer_distance_miles || 0),
-    dealer_addons_amount: v.dealer_addons_amount || raw.addon_total || 0,
+    dealer_addons_amount: v.dealer_addons_amount || raw.addon_total || raw.price_library?.calc_accoessories || raw.price_library?.calc_accessories || 0,
     listing_url: listingUrl,
     image_url: imageUrl,
   };
@@ -859,6 +929,7 @@ async function scanBackendInventory() {
 
     removedVins = new Set();
     selectedVins = new Set();
+    compareVins = new Set();
     activeResultFilters = {
       dealer: new Set(),
       trim: new Set(),
@@ -917,18 +988,23 @@ function renderVehicles() {
   const visibleVehicles = vehicles.filter((v) => !removedVins.has(v.vin)).filter(matchesLocalFilters);
   const visibleVins = new Set(vehicles.filter((v) => !removedVins.has(v.vin)).map((v) => v.vin));
   selectedVins = new Set([...selectedVins].filter((vin) => visibleVins.has(vin)));
+  compareVins = new Set([...compareVins].filter((vin) => visibleVins.has(vin)));
   updateSelectedCount();
 
   if (!visibleVehicles.length) {
     list.innerHTML = `<div class="empty-box">No vehicles found.</div>`;
+    renderComparePanel();
     return;
   }
 
   const grouped = groupByDealer(visibleVehicles);
 
-  list.innerHTML = Object.entries(grouped)
+  list.innerHTML = `
+    <section id="comparePanel" class="compare-panel hidden"></section>
+    ${Object.entries(grouped)
     .map(([dealerName, dealerVehicles]) => {
       const first = dealerVehicles[0];
+      const meta = getDealerMeta(first);
 
       return `
         <div class="dealer-box">
@@ -936,6 +1012,13 @@ function renderVehicles() {
             <div>
               <h3>${dealerName}</h3>
               <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""} ${first.dealer_distance_miles ? " · " + first.dealer_distance_miles + " miles away" : ""}</p>
+              <div class="dealer-meta">
+                <span>${dealerRatingText(meta)}</span>
+                <span>${meta.phone || "Phone not loaded"}</span>
+                <span>${meta.address || "Address not loaded"}</span>
+                <span>${meta.hours || "Hours not loaded"}</span>
+                <span>${meta.email || "Email not loaded"}</span>
+              </div>
             </div>
             <strong>${dealerVehicles.length} cars</strong>
           </div>
@@ -946,17 +1029,22 @@ function renderVehicles() {
         </div>
       `;
     })
-    .join("");
+    .join("")}
+  `;
+
+  renderComparePanel();
 }
 
 function renderVehicleCard(v) {
   const raw = v.raw_data || {};
   const quote = calculateLeaseQuote(v);
   const basePayment = quote.monthlyPayment || Number(v.base_monthly_payment || v.estimated_payment || 0);
-  const dealerAddons = Number(v.dealer_addons_amount || v.junk_fee || raw.addon_total || 0);
+  const dealerAddons = detectDealerAddons(v);
+  const conditionalIncentives = conditionalIncentiveText(v);
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
   const isFavorite = favoriteVins.has(v.vin);
   const isSelected = selectedVins.has(v.vin);
+  const isCompared = compareVins.has(v.vin);
   const showInvoice = v.invoice_verified && Number(v.invoice_price || 0) > 0;
   const stickerUrl = normalizeStickerUrl(v);
   const targetInputId = `target_${v.vin}`;
@@ -1049,6 +1137,7 @@ function renderVehicleCard(v) {
                   .join("")
               : `<span>No manufacturer incentives available for this car.</span>`
           }
+          ${conditionalIncentives ? `<span>${conditionalIncentives}</span>` : ""}
         </div>
 
         <div class="action-row">
@@ -1059,6 +1148,7 @@ function renderVehicleCard(v) {
               : `<button disabled>Sticker PDF N/A</button>`
           }
           <button onclick="sendBidRequest('${v.vin || ""}')">Send Bid Request</button>
+          <button class="${isCompared ? "active-action" : ""}" onclick="toggleCompare('${v.vin || ""}')">${isCompared ? "Remove Compare" : "Add to Compare"}</button>
           <button onclick="copyMessage('${v.vin || ""}')">Copy Message</button>
         </div>
       </div>
@@ -1097,6 +1187,66 @@ function updateTargetPayment(vin) {
     trade_equity_applied: result.tradeEquity,
     cap_cost_after_trade_before_discount: result.currentCapCost,
   };
+}
+
+function renderComparePanel() {
+  const panel = document.getElementById("comparePanel");
+  if (!panel) return;
+
+  const compared = vehicles.filter((v) => compareVins.has(v.vin));
+
+  if (!compared.length) {
+    panel.classList.add("hidden");
+    panel.innerHTML = "";
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  panel.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>Compare Cars</h2>
+        <p>${compared.length} selected for side-by-side comparison.</p>
+      </div>
+      <button type="button" class="ghost-btn" onclick="clearCompare()">Clear Compare</button>
+    </div>
+    <div class="compare-grid">
+      ${compared
+        .map((v) => {
+          const quote = calculateLeaseQuote(v);
+          const addons = detectDealerAddons(v);
+          return `
+            <div class="compare-card">
+              <b>${v.year || ""} ${v.brand || ""} ${v.model || ""}</b>
+              <span>${v.trim || ""}</span>
+              <span>${v.dealer_name || "Dealer"}</span>
+              <div><small>MSRP</small><strong>${money(v.msrp)}</strong></div>
+              <div><small>Website Price</small><strong>${money(v.sale_price)}</strong></div>
+              <div><small>Incentive</small><strong>${quote.incentive ? money(quote.incentive) : "None"}</strong></div>
+              <div><small>Residual</small><strong>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</strong></div>
+              <div><small>MF</small><strong>${v.money_factor ? `${v.money_factor} / ${moneyFactorApr(v.money_factor)}` : "Verify"}</strong></div>
+              <div><small>Add-ons</small><strong>${addons ? money(addons) : "None found"}</strong></div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function toggleCompare(vin) {
+  if (compareVins.has(vin)) {
+    compareVins.delete(vin);
+  } else {
+    compareVins.add(vin);
+  }
+
+  renderVehicles();
+}
+
+function clearCompare() {
+  compareVins = new Set();
+  renderVehicles();
 }
 
 function recalculatePayment(vin) {
