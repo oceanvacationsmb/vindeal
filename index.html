@@ -10,7 +10,7 @@
   <header class="topbar">
     <div>
       <h1>VINDeal</h1>
-      <p>Find real dealer prices, rebates, add-ons, lease programs, and bid-ready cars.</p>
+      <p>Lease deal hunter. Real dealer prices, rebates, fees, taxes, and payment estimate.</p>
     </div>
   </header>
 
@@ -18,8 +18,8 @@
     <section class="search-panel">
       <div class="section-head">
         <div>
-          <h2>Search Deals</h2>
-          <p>Choose the car. VINDeal scans dealers and shows clean deal cards.</p>
+          <h2>Search Lease Deals</h2>
+          <p>Choose ZIP, radius, car, colors, and lease terms. Purchase is disabled for now.</p>
         </div>
       </div>
 
@@ -44,7 +44,7 @@
 
         <div class="field">
           <label>Registering State</label>
-          <select id="registrationState">
+          <select id="registrationState" onchange="loadProgramsForSelectedCar()">
             <option value="SC" selected>South Carolina</option>
             <option value="NC">North Carolina</option>
             <option value="GA">Georgia</option>
@@ -59,9 +59,8 @@
 
         <div class="field">
           <label>Deal Type</label>
-          <select id="dealType" onchange="toggleDealType()">
-            <option value="lease" selected>Lease</option>
-            <option value="purchase">Purchase</option>
+          <select id="dealType" disabled>
+            <option value="lease" selected>Lease only</option>
           </select>
         </div>
 
@@ -85,7 +84,7 @@
           <select id="year" onchange="refreshModelFilters()"></select>
         </div>
 
-        <div class="field lease-only">
+        <div class="field">
           <label>Lease Term</label>
           <select id="term" onchange="loadProgramsForSelectedCar()">
             <option value="12">12 months</option>
@@ -99,7 +98,7 @@
           </select>
         </div>
 
-        <div class="field lease-only">
+        <div class="field">
           <label>Miles Per Year</label>
           <select id="miles" onchange="loadProgramsForSelectedCar()">
             <option value="7500">7,500</option>
@@ -132,18 +131,73 @@
         <div id="interiorColorOptions" class="pill-grid"></div>
       </div>
 
-      <div class="filter-box">
-        <div class="filter-title">Features</div>
-        <div id="featureOptions" class="pill-grid"></div>
+      <div class="filter-actions">
+        <button type="button" class="secondary-btn" onclick="applyFilters()">Apply Filters</button>
       </div>
 
       <div class="filter-box">
         <div class="filter-title">Manufacturer Rebates / Qualifying Offers</div>
-        <p class="small-note">Select only the offers you qualify for. General rebates are shown automatically.</p>
+        <p class="small-note">General rebates are checked automatically. Select only extra offers you qualify for.</p>
         <div id="rebateOptions" class="rebate-grid"></div>
       </div>
 
       <div id="programPreview" class="program-preview hidden"></div>
+
+      <details class="trade-box">
+        <summary>Optional trade-in</summary>
+
+        <div class="form-grid contact-grid">
+          <div class="field">
+            <label>Trade VIN</label>
+            <input id="tradeVin" type="text" placeholder="VIN" />
+          </div>
+
+          <div class="field">
+            <label>License Plate</label>
+            <input id="tradePlate" type="text" placeholder="Plate" />
+          </div>
+
+          <div class="field">
+            <label>Plate State</label>
+            <input id="tradePlateState" type="text" placeholder="SC" />
+          </div>
+
+          <div class="field">
+            <label>Mileage</label>
+            <input id="tradeMileage" type="number" placeholder="45000" />
+          </div>
+
+          <div class="field">
+            <label>Condition</label>
+            <select id="tradeCondition">
+              <option value="">Select</option>
+              <option value="excellent">Excellent</option>
+              <option value="very_good">Very Good</option>
+              <option value="good">Good</option>
+              <option value="fair">Fair</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Payoff Amount</label>
+            <input id="tradePayoff" type="number" placeholder="0" />
+          </div>
+
+          <div class="field">
+            <label>Payments Left</label>
+            <input id="tradePaymentsLeft" type="number" placeholder="0" />
+          </div>
+
+          <div class="field">
+            <label>Current Monthly Payment</label>
+            <input id="tradeMonthlyPayment" type="number" placeholder="0" />
+          </div>
+        </div>
+
+        <div class="trade-note">
+          KBB low / average / high will stay pending until KBB valuation API is connected.
+        </div>
+      </details>
 
       <details class="contact-box">
         <summary>Contact info for dealer bid request</summary>
@@ -166,7 +220,7 @@
         </div>
       </details>
 
-      <button id="scanBtn" onclick="scanBackendInventory()">Search Deals</button>
+      <button id="scanBtn" onclick="scanBackendInventory()">Search Lease Deals</button>
     </section>
 
     <section class="summary-row">
@@ -181,7 +235,7 @@
       </div>
 
       <div class="summary-card">
-        <span>Program</span>
+        <span>Lease Program</span>
         <strong id="programStatus">Not checked</strong>
       </div>
     </section>
@@ -190,12 +244,12 @@
 
     <section class="results-head">
       <h2>Results</h2>
-      <p>Cars are grouped by dealer. Add-ons and high fees are marked clearly.</p>
+      <p>Lease estimate is based on stored verified residual/MF when available, plus estimated tax, acquisition fee, doc fee, and add-ons.</p>
     </section>
 
     <section id="vehicleList" class="dealer-results"></section>
   </main>
 
-  <script src="app.js?v=50"></script>
+  <script src="app.js?v=70"></script>
 </body>
 </html>
