@@ -1,4 +1,48 @@
-let deals = JSON.parse(localStorage.getItem("vindeal_offers")) || [];
+let vehicles = JSON.parse(localStorage.getItem("vindeal_vehicles")) || [];
+
+const vehicleData = {
+  Hyundai: {
+    "IONIQ 9": ["Any", "S", "SE", "SEL", "Limited", "Performance Limited"],
+    "IONIQ 5": ["Any", "SE", "SEL", "Limited", "N"],
+    "IONIQ 6": ["Any", "SE", "SEL", "Limited"],
+    Palisade: ["Any", "SE", "SEL", "XRT", "Limited", "Calligraphy"]
+  },
+  Kia: {
+    EV9: ["Any", "Light", "Wind", "Land", "GT-Line"],
+    EV6: ["Any", "Light", "Wind", "GT-Line", "GT"],
+    Telluride: ["Any", "LX", "S", "EX", "SX", "SX Prestige"]
+  },
+  BMW: {
+    X5: ["Any", "xDrive40i", "xDrive50e", "M60i"],
+    iX: ["Any", "xDrive50", "M60"],
+    i4: ["Any", "eDrive35", "eDrive40", "xDrive40", "M50"]
+  },
+  Genesis: {
+    GV70: ["Any", "2.5T", "3.5T", "Electrified"],
+    GV80: ["Any", "2.5T", "3.5T"],
+    GV60: ["Any", "Advanced", "Performance"]
+  },
+  "Mercedes-Benz": {
+    GLE: ["Any", "350", "450", "580", "AMG 53"],
+    EQE: ["Any", "350+", "350 4MATIC", "500 4MATIC"],
+    EQS: ["Any", "450+", "450 4MATIC", "580 4MATIC"]
+  },
+  Toyota: {
+    "Grand Highlander": ["Any", "XLE", "Limited", "Platinum"],
+    "bZ4X": ["Any", "XLE", "Limited"],
+    Highlander: ["Any", "LE", "XLE", "Limited", "Platinum"]
+  },
+  Honda: {
+    Pilot: ["Any", "Sport", "EX-L", "TrailSport", "Touring", "Elite"],
+    Prologue: ["Any", "EX", "Touring", "Elite"],
+    Passport: ["Any", "EX-L", "TrailSport", "Black Edition"]
+  },
+  Lexus: {
+    TX: ["Any", "350", "500h", "550h+"],
+    RX: ["Any", "350", "350h", "500h"],
+    RZ: ["Any", "300e", "450e"]
+  }
+};
 
 function money(value) {
   return "$" + Number(value || 0).toLocaleString(undefined, {
@@ -7,694 +51,660 @@ function money(value) {
   });
 }
 
-function num(id) {
-  return Number(document.getElementById(id).value) || 0;
-}
-
-function txt(id) {
+function getValue(id) {
   return document.getElementById(id).value.trim();
 }
 
-function checked(id) {
+function getNumber(id) {
+  return Number(document.getElementById(id).value) || 0;
+}
+
+function isChecked(id) {
   return document.getElementById(id).checked;
 }
 
+function getRadio(name) {
+  const selected = document.querySelector(`input[name="${name}"]:checked`);
+  return selected ? selected.value : "";
+}
+
 function saveStorage() {
-  localStorage.setItem("vindeal_offers", JSON.stringify(deals));
+  localStorage.setItem("vindeal_vehicles", JSON.stringify(vehicles));
 }
 
-function totalManufacturerRebates(deal) {
+function updateModels() {
+  const brand = getValue("brand");
+  const modelSelect = document.getElementById("model");
+
+  modelSelect.innerHTML = "";
+
+  Object.keys(vehicleData[brand]).forEach(model => {
+    const option = document.createElement("option");
+    option.value = model;
+    option.textContent = model;
+    modelSelect.appendChild(option);
+  });
+
+  updateTrims();
+}
+
+function updateTrims() {
+  const brand = getValue("brand");
+  const model = getValue("model");
+  const trimSelect = document.getElementById("trim");
+
+  trimSelect.innerHTML = "";
+
+  vehicleData[brand][model].forEach(trim => {
+    const option = document.createElement("option");
+    option.value = trim;
+    option.textContent = trim;
+    trimSelect.appendChild(option);
+  });
+}
+
+function getSearchProfile() {
+  return {
+    zipCode: getValue("zipCode"),
+    radius: getRadio("radius"),
+    brand: getValue("brand"),
+    model: getValue("model"),
+    trim: getValue("trim"),
+    year: getValue("year"),
+    exteriorColor: getRadio("color"),
+    interiorColor: getRadio("interior"),
+    features: {
+      sunroof: isChecked("fSunroof"),
+      panoramic: isChecked("fPanoramic"),
+      heatedWheel: isChecked("fHeatedWheel"),
+      captainChairs: isChecked("fCaptain"),
+      ventilatedSeats: isChecked("fVentSeats"),
+      hud: isChecked("fHud"),
+      awd: isChecked("fAwd"),
+      towPackage: isChecked("fTow")
+    }
+  };
+}
+
+function searchNearby() {
+  const search = getSearchProfile();
+
+  const query = encodeURIComponent(
+    `${search.year} ${search.brand} ${search.model} ${search.trim === "Any" ? "" : search.trim} lease ${search.zipCode}`
+  );
+
+  const links = [
+    `https://www.google.com/search?q=${query}`,
+    `https://www.cars.com/shopping/results/?stock_type=new&makes%5B%5D=${search.brand.toLowerCase()}&models%5B%5D=${search.brand.toLowerCase()}-${search.model.toLowerCase().replaceAll(" ", "_")}&zip=${search.zipCode}&maximum_distance=${search.radius}`,
+    `https://www.autotrader.com/cars-for-sale/new-cars/${search.brand}/${search.model}/${search.zipCode}?searchRadius=${search.radius}`,
+    `https://www.cargurus.com/Cars/new/searchresults.action?zip=${search.zipCode}&distance=${search.radius}&entitySelectingHelper.selectedEntity=d`
+  ];
+
+  links.forEach(link => window.open(link, "_blank"));
+}
+
+function openManufacturerOffers() {
+  const brand = getValue("brand");
+
+  const links = {
+    Hyundai: "https://www.hyundaiusa.com/us/en/offers",
+    Kia: "https://www.kia.com/us/en/offers",
+    BMW: "https://www.bmwusa.com/special-offers.html",
+    Genesis: "https://www.genesis.com/us/en/offers.html",
+    "Mercedes-Benz": "https://www.mbusa.com/en/special-offers",
+    Toyota: "https://www.toyota.com/deals-incentives/",
+    Honda: "https://automobiles.honda.com/tools/current-offers",
+    Lexus: "https://www.lexus.com/offers"
+  };
+
+  window.open(links[brand] || "https://www.google.com/search?q=manufacturer+lease+offers", "_blank");
+}
+
+function totalRebates(vehicle) {
   return (
-    Number(deal.manufacturerRebate || 0) +
-    Number(deal.leaseCash || 0) +
-    Number(deal.evCredit || 0) +
-    Number(deal.loyaltyConquest || 0) +
-    Number(deal.bonusCash || 0)
+    Number(vehicle.manufacturerRebate || 0) +
+    Number(vehicle.leaseCash || 0) +
+    Number(vehicle.evCredit || 0) +
+    Number(vehicle.loyaltyCash || 0)
   );
 }
 
-function totalFees(deal) {
+function totalFees(vehicle) {
   return (
-    Number(deal.docFee || 0) +
-    Number(deal.acquisitionFee || 0) +
-    Number(deal.dmvFee || 0) +
-    Number(deal.junkFees || 0)
+    Number(vehicle.docFee || 0) +
+    Number(vehicle.acqFee || 0) +
+    Number(vehicle.dmvFee || 0) +
+    Number(vehicle.junkFee || 0)
   );
 }
 
-function calculateLease(deal) {
-  const msrp = Number(deal.msrp || 0);
-  const dealerDiscount = Number(deal.dealerDiscount || 0);
-  const rebates = totalManufacturerRebates(deal);
-  const fees = totalFees(deal);
-  const tradeCredit = Number(deal.tradeCredit || 0);
-  const downPayment = Number(deal.downPayment || 0);
-  const residualPercent = Number(deal.residualPercent || 0);
-  const moneyFactor = Number(deal.moneyFactor || 0);
-  const term = Number(deal.term || 36);
-  const taxPercent = Number(deal.taxPercent || 0);
+function calculateLease(vehicle) {
+  const msrp = Number(vehicle.msrp || 0);
+  const dealerDiscount = Number(vehicle.dealerDiscount || 0);
+  const rebates = totalRebates(vehicle);
+  const fees = totalFees(vehicle);
+  const downPayment = Number(vehicle.downPayment || 0);
+  const residualPercent = Number(vehicle.residual || 0);
+  const mf = Number(vehicle.mf || 0);
+  const term = Number(vehicle.term || 36);
+  const taxRate = Number(vehicle.taxRate || 0);
 
   const sellingPrice = msrp - dealerDiscount;
-  const netCapCost = sellingPrice - rebates + fees - tradeCredit - downPayment;
+  const capCost = sellingPrice - rebates + fees - downPayment;
   const residualValue = msrp * (residualPercent / 100);
 
-  const depreciationCharge = (netCapCost - residualValue) / term;
-  const financeCharge = (netCapCost + residualValue) * moneyFactor;
-  const basePayment = depreciationCharge + financeCharge;
-  const taxAmount = basePayment * (taxPercent / 100);
-  const monthlyPayment = basePayment + taxAmount;
+  const depreciation = (capCost - residualValue) / term;
+  const rentCharge = (capCost + residualValue) * mf;
+  const basePayment = depreciation + rentCharge;
+  const tax = basePayment * (taxRate / 100);
+  const monthly = basePayment + tax;
 
-  const totalSavings = dealerDiscount + rebates;
-  const discountPercent = msrp > 0 ? (totalSavings / msrp) * 100 : 0;
+  const totalDiscount = dealerDiscount + rebates;
+  const discountPercent = msrp ? (totalDiscount / msrp) * 100 : 0;
 
   return {
     rebates,
     fees,
     sellingPrice,
-    netCapCost,
+    capCost,
     residualValue,
-    depreciationCharge,
-    financeCharge,
+    depreciation,
+    rentCharge,
     basePayment,
-    taxAmount,
-    monthlyPayment,
-    totalSavings,
+    tax,
+    monthly,
+    totalDiscount,
     discountPercent
   };
 }
 
-function getScore(deal) {
-  const calc = calculateLease(deal);
+function getScore(vehicle) {
+  const calc = calculateLease(vehicle);
 
   let score = 1000;
 
-  score -= calc.monthlyPayment;
-  score += Number(deal.dealerDiscount || 0) / 80;
-  score += calc.rebates / 150;
-  score -= Number(deal.junkFees || 0) / 12;
-  score -= Number(deal.docFee || 0) / 75;
+  score -= calc.monthly;
+  score += Number(vehicle.dealerDiscount || 0) / 80;
+  score += calc.rebates / 120;
+  score -= Number(vehicle.junkFee || 0) / 10;
+  score -= Number(vehicle.docFee || 0) / 100;
 
-  if (deal.features.preferredColor) score += 40;
-  if (deal.features.captainChairs) score += 20;
-  if (deal.features.sunroof) score += 15;
-  if (deal.features.panoramicRoof) score += 15;
-  if (deal.features.heatedWheel) score += 10;
-  if (deal.features.ventilatedSeats) score += 10;
-  if (deal.features.hud) score += 8;
-  if (deal.features.premiumSound) score += 8;
-  if (deal.features.towPackage) score += 6;
-  if (deal.features.thirdRow) score += 6;
+  if (vehicle.exteriorColor !== "Any") score += 20;
+  if (vehicle.interiorColor !== "Any") score += 10;
+
+  if (vehicle.features.sunroof) score += 10;
+  if (vehicle.features.panoramic) score += 10;
+  if (vehicle.features.heatedWheel) score += 8;
+  if (vehicle.features.captainChairs) score += 12;
+  if (vehicle.features.ventilatedSeats) score += 8;
+  if (vehicle.features.hud) score += 6;
+  if (vehicle.features.awd) score += 8;
+  if (vehicle.features.towPackage) score += 4;
 
   return score;
 }
 
-function getGrade(deal) {
-  const calc = calculateLease(deal);
-  const junkFees = Number(deal.junkFees || 0);
+function getGrade(vehicle) {
+  const calc = calculateLease(vehicle);
+  const junkFee = Number(vehicle.junkFee || 0);
 
-  if (junkFees >= 2000) return "Bad - Heavy Junk Fees";
-  if (junkFees >= 1000) return "Warning - Add-ons";
-  if (calc.monthlyPayment <= 550) return "Excellent";
-  if (calc.monthlyPayment <= 650) return "Good";
-  if (calc.monthlyPayment <= 750) return "Fair";
+  if (junkFee >= 2000) return "Bad - Heavy Add-ons";
+  if (junkFee >= 1000) return "Warning - Junk Fees";
+  if (calc.monthly <= 550) return "Excellent";
+  if (calc.monthly <= 650) return "Good";
+  if (calc.monthly <= 750) return "Fair";
   return "Expensive";
 }
 
-function saveDeal() {
-  const editId = document.getElementById("editId").value;
+function addVehicle() {
+  const search = getSearchProfile();
 
-  const deal = {
-    id: editId ? Number(editId) : Date.now(),
+  const vehicle = {
+    id: Date.now(),
 
-    vehicleName: txt("vehicleName"),
-    vin: txt("vin"),
-    vehicleLink: txt("vehicleLink"),
-    brand: txt("brand"),
-    model: txt("model"),
-    year: num("year"),
-    trim: txt("trim"),
-    exteriorColor: txt("exteriorColor"),
-    interiorColor: txt("interiorColor"),
-    drivetrain: txt("drivetrain"),
-    seats: txt("seats"),
-    status: txt("status"),
+    zipCode: search.zipCode,
+    radius: search.radius,
+    brand: search.brand,
+    model: search.model,
+    trim: search.trim,
+    year: search.year,
+    exteriorColor: search.exteriorColor,
+    interiorColor: search.interiorColor,
+    features: search.features,
 
-    dealerName: txt("dealerName"),
-    dealerCity: txt("dealerCity"),
-    dealerState: txt("dealerState"),
-    salesperson: txt("salesperson"),
-    dealerPhone: txt("dealerPhone"),
-    dealerEmail: txt("dealerEmail"),
+    vin: getValue("vin"),
+    listingLink: getValue("listingLink"),
+    dealerName: getValue("dealerName"),
+    dealerCity: getValue("dealerCity"),
+    dealerState: getValue("dealerState"),
+    vehicleName: getValue("vehicleName"),
 
-    manufacturerRebate: num("manufacturerRebate"),
-    leaseCash: num("leaseCash"),
-    evCredit: num("evCredit"),
-    loyaltyConquest: num("loyaltyConquest"),
-    bonusCash: num("bonusCash"),
-    rebateExpiration: txt("rebateExpiration"),
-    rebateSourceLink: txt("rebateSourceLink"),
+    manufacturerRebate: getNumber("manufacturerRebate"),
+    leaseCash: getNumber("leaseCash"),
+    evCredit: getNumber("evCredit"),
+    loyaltyCash: getNumber("loyaltyCash"),
+    rebateExpiration: getValue("rebateExpiration"),
+    rebateLink: getValue("rebateLink"),
 
-    msrp: num("msrp"),
-    dealerDiscount: num("dealerDiscount"),
-    docFee: num("docFee"),
-    acquisitionFee: num("acquisitionFee"),
-    dmvFee: num("dmvFee"),
-    junkFees: num("junkFees"),
-    tradeCredit: num("tradeCredit"),
-    downPayment: num("downPayment"),
-    dueAtSigning: num("dueAtSigning"),
-    residualPercent: num("residualPercent"),
-    moneyFactor: num("moneyFactor"),
-    term: num("term"),
-    miles: num("miles"),
-    taxPercent: num("taxPercent"),
+    msrp: getNumber("msrp"),
+    dealerDiscount: getNumber("dealerDiscount"),
+    docFee: getNumber("docFee"),
+    acqFee: getNumber("acqFee"),
+    dmvFee: getNumber("dmvFee"),
+    junkFee: getNumber("junkFee"),
+    residual: getNumber("residual"),
+    mf: getNumber("mf"),
+    term: getNumber("term"),
+    miles: getNumber("miles"),
+    downPayment: getNumber("downPayment"),
+    taxRate: getNumber("taxRate"),
 
-    features: {
-      sunroof: checked("sunroof"),
-      heatedWheel: checked("heatedWheel"),
-      captainChairs: checked("captainChairs"),
-      ventilatedSeats: checked("ventilatedSeats"),
-      hud: checked("hud"),
-      premiumSound: checked("premiumSound"),
-      towPackage: checked("towPackage"),
-      thirdRow: checked("thirdRow"),
-      panoramicRoof: checked("panoramicRoof"),
-      preferredColor: checked("preferredColor")
-    },
-
-    notes: txt("notes"),
-    updatedAt: new Date().toLocaleString()
+    notes: getValue("notes"),
+    createdAt: new Date().toLocaleString()
   };
 
-  if (!deal.vehicleName && !deal.vin && !deal.dealerName) {
-    alert("Add at least vehicle name, VIN, or dealer name.");
+  if (!vehicle.vin && !vehicle.listingLink && !vehicle.dealerName) {
+    alert("Add VIN, dealer link, or dealer name first.");
     return;
   }
 
-  if (editId) {
-    deals = deals.map(item => item.id === Number(editId) ? deal : item);
-  } else {
-    deals.push(deal);
-  }
-
+  vehicles.push(vehicle);
   saveStorage();
-  resetForm();
-  renderDeals();
+  resetAddForm();
+  renderVehicles();
 }
 
-function resetForm() {
-  document.getElementById("editId").value = "";
+function resetAddForm() {
+  const fields = [
+    "vin",
+    "listingLink",
+    "dealerName",
+    "dealerCity",
+    "dealerState",
+    "vehicleName",
+    "msrp",
+    "dealerDiscount",
+    "docFee",
+    "acqFee",
+    "dmvFee",
+    "junkFee",
+    "residual",
+    "mf",
+    "notes"
+  ];
 
-  document.querySelectorAll("input, textarea, select").forEach(field => {
-    if (field.type === "checkbox") {
-      field.checked = false;
-    } else if (field.id !== "editId") {
-      field.value = "";
-    }
+  fields.forEach(id => {
+    document.getElementById(id).value = "";
   });
 
-  document.getElementById("status").value = "New Lead";
+  document.getElementById("downPayment").value = "0";
+  document.getElementById("taxRate").value = "0";
+  document.getElementById("term").value = "36";
+  document.getElementById("miles").value = "10000";
 }
 
-function editDeal(id) {
-  const deal = deals.find(item => item.id === id);
-  if (!deal) return;
+function deleteVehicle(id) {
+  if (!confirm("Delete this vehicle?")) return;
 
-  document.getElementById("editId").value = deal.id;
-
-  setValue("vehicleName", deal.vehicleName);
-  setValue("vin", deal.vin);
-  setValue("vehicleLink", deal.vehicleLink);
-  setValue("brand", deal.brand);
-  setValue("model", deal.model);
-  setValue("year", deal.year);
-  setValue("trim", deal.trim);
-  setValue("exteriorColor", deal.exteriorColor);
-  setValue("interiorColor", deal.interiorColor);
-  setValue("drivetrain", deal.drivetrain);
-  setValue("seats", deal.seats);
-  setValue("status", deal.status);
-
-  setValue("dealerName", deal.dealerName);
-  setValue("dealerCity", deal.dealerCity);
-  setValue("dealerState", deal.dealerState);
-  setValue("salesperson", deal.salesperson);
-  setValue("dealerPhone", deal.dealerPhone);
-  setValue("dealerEmail", deal.dealerEmail);
-
-  setValue("manufacturerRebate", deal.manufacturerRebate);
-  setValue("leaseCash", deal.leaseCash);
-  setValue("evCredit", deal.evCredit);
-  setValue("loyaltyConquest", deal.loyaltyConquest);
-  setValue("bonusCash", deal.bonusCash);
-  setValue("rebateExpiration", deal.rebateExpiration);
-  setValue("rebateSourceLink", deal.rebateSourceLink);
-
-  setValue("msrp", deal.msrp);
-  setValue("dealerDiscount", deal.dealerDiscount);
-  setValue("docFee", deal.docFee);
-  setValue("acquisitionFee", deal.acquisitionFee);
-  setValue("dmvFee", deal.dmvFee);
-  setValue("junkFees", deal.junkFees);
-  setValue("tradeCredit", deal.tradeCredit);
-  setValue("downPayment", deal.downPayment);
-  setValue("dueAtSigning", deal.dueAtSigning);
-  setValue("residualPercent", deal.residualPercent);
-  setValue("moneyFactor", deal.moneyFactor);
-  setValue("term", deal.term);
-  setValue("miles", deal.miles);
-  setValue("taxPercent", deal.taxPercent);
-
-  setCheck("sunroof", deal.features.sunroof);
-  setCheck("heatedWheel", deal.features.heatedWheel);
-  setCheck("captainChairs", deal.features.captainChairs);
-  setCheck("ventilatedSeats", deal.features.ventilatedSeats);
-  setCheck("hud", deal.features.hud);
-  setCheck("premiumSound", deal.features.premiumSound);
-  setCheck("towPackage", deal.features.towPackage);
-  setCheck("thirdRow", deal.features.thirdRow);
-  setCheck("panoramicRoof", deal.features.panoramicRoof);
-  setCheck("preferredColor", deal.features.preferredColor);
-
-  setValue("notes", deal.notes);
-
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  vehicles = vehicles.filter(vehicle => vehicle.id !== id);
+  saveStorage();
+  renderVehicles();
 }
 
-function setValue(id, value) {
-  document.getElementById(id).value = value || "";
-}
+function duplicateVehicle(id) {
+  const vehicle = vehicles.find(item => item.id === id);
+  if (!vehicle) return;
 
-function setCheck(id, value) {
-  document.getElementById(id).checked = Boolean(value);
-}
-
-function duplicateDeal(id) {
-  const deal = deals.find(item => item.id === id);
-  if (!deal) return;
-
-  const copy = JSON.parse(JSON.stringify(deal));
+  const copy = JSON.parse(JSON.stringify(vehicle));
   copy.id = Date.now();
-  copy.vehicleName = `${deal.vehicleName || "Vehicle"} Copy`;
-  copy.status = "New Lead";
-  copy.updatedAt = new Date().toLocaleString();
+  copy.vehicleName = `${vehicle.vehicleName || "Vehicle"} Copy`;
+  copy.createdAt = new Date().toLocaleString();
 
-  deals.push(copy);
+  vehicles.push(copy);
   saveStorage();
-  renderDeals();
+  renderVehicles();
 }
 
-function deleteDeal(id) {
-  if (!confirm("Delete this offer?")) return;
+function clearAll() {
+  if (!confirm("Delete all saved vehicles?")) return;
 
-  deals = deals.filter(item => item.id !== id);
+  vehicles = [];
   saveStorage();
-  renderDeals();
+  renderVehicles();
 }
 
-function clearAllDeals() {
-  if (!confirm("Delete all offers?")) return;
+function featureBadges(vehicle) {
+  const badges = [];
 
-  deals = [];
-  saveStorage();
-  renderDeals();
-}
+  if (vehicle.features.sunroof) badges.push("Sunroof");
+  if (vehicle.features.panoramic) badges.push("Panoramic Roof");
+  if (vehicle.features.heatedWheel) badges.push("Heated Wheel");
+  if (vehicle.features.captainChairs) badges.push("Captain Chairs");
+  if (vehicle.features.ventilatedSeats) badges.push("Vent Seats");
+  if (vehicle.features.hud) badges.push("HUD");
+  if (vehicle.features.awd) badges.push("AWD");
+  if (vehicle.features.towPackage) badges.push("Tow Package");
 
-function featureBadges(deal) {
-  const features = [];
-
-  if (deal.features.sunroof) features.push("Sunroof");
-  if (deal.features.heatedWheel) features.push("Heated Wheel");
-  if (deal.features.captainChairs) features.push("Captain Chairs");
-  if (deal.features.ventilatedSeats) features.push("Ventilated Seats");
-  if (deal.features.hud) features.push("HUD");
-  if (deal.features.premiumSound) features.push("Premium Sound");
-  if (deal.features.towPackage) features.push("Tow Package");
-  if (deal.features.thirdRow) features.push("Third Row");
-  if (deal.features.panoramicRoof) features.push("Panoramic Roof");
-  if (deal.features.preferredColor) features.push("Preferred Color");
-
-  if (features.length === 0) {
-    return `<span class="badge badge-gray">No features marked</span>`;
+  if (badges.length === 0) {
+    return `<span class="badge badge-gray">No feature filter</span>`;
   }
 
-  return features.map(item => `<span class="badge">${item}</span>`).join("");
+  return badges.map(item => `<span class="badge">${item}</span>`).join("");
 }
 
-function passesFilters(deal) {
-  const search = txt("searchFilter").toLowerCase();
-  const maxPayment = num("maxPaymentFilter");
-  const brand = txt("brandFilter").toLowerCase();
-  const model = txt("modelFilter").toLowerCase();
-  const trim = txt("trimFilter").toLowerCase();
-  const color = txt("colorFilter").toLowerCase();
+function getFilteredVehicles() {
+  const filter = getValue("filterText").toLowerCase();
 
-  const calc = calculateLease(deal);
+  let filtered = vehicles.filter(vehicle => {
+    const text = `
+      ${vehicle.vin}
+      ${vehicle.listingLink}
+      ${vehicle.dealerName}
+      ${vehicle.dealerCity}
+      ${vehicle.dealerState}
+      ${vehicle.vehicleName}
+      ${vehicle.brand}
+      ${vehicle.model}
+      ${vehicle.trim}
+      ${vehicle.exteriorColor}
+      ${vehicle.interiorColor}
+    `.toLowerCase();
 
-  const fullText = `
-    ${deal.vehicleName}
-    ${deal.vin}
-    ${deal.brand}
-    ${deal.model}
-    ${deal.trim}
-    ${deal.exteriorColor}
-    ${deal.interiorColor}
-    ${deal.dealerName}
-    ${deal.dealerCity}
-    ${deal.dealerState}
-  `.toLowerCase();
-
-  if (search && !fullText.includes(search)) return false;
-  if (maxPayment && calc.monthlyPayment > maxPayment) return false;
-  if (brand && !String(deal.brand || "").toLowerCase().includes(brand)) return false;
-  if (model && !String(deal.model || "").toLowerCase().includes(model)) return false;
-  if (trim && !String(deal.trim || "").toLowerCase().includes(trim)) return false;
-
-  const colorText = `${deal.exteriorColor || ""} ${deal.interiorColor || ""}`.toLowerCase();
-  if (color && !colorText.includes(color)) return false;
-
-  if (checked("filterSunroof") && !deal.features.sunroof) return false;
-  if (checked("filterHeatedWheel") && !deal.features.heatedWheel) return false;
-  if (checked("filterCaptainChairs") && !deal.features.captainChairs) return false;
-  if (checked("filterPreferredColor") && !deal.features.preferredColor) return false;
-
-  return true;
-}
-
-function renderDashboard(filteredDeals) {
-  const dashboard = document.getElementById("dashboard");
-
-  if (filteredDeals.length === 0) {
-    dashboard.innerHTML = `
-      <div class="empty">No offers yet. Add a vehicle or click Load Demo Data.</div>
-    `;
-    return;
-  }
-
-  const sortedByPayment = [...filteredDeals].sort((a, b) => {
-    return calculateLease(a).monthlyPayment - calculateLease(b).monthlyPayment;
+    return !filter || text.includes(filter);
   });
 
-  const sortedByScore = [...filteredDeals].sort((a, b) => {
+  const sortBy = getValue("sortBy");
+
+  filtered.sort((a, b) => {
+    const calcA = calculateLease(a);
+    const calcB = calculateLease(b);
+
+    if (sortBy === "payment") return calcA.monthly - calcB.monthly;
+    if (sortBy === "discount") return calcB.totalDiscount - calcA.totalDiscount;
+    if (sortBy === "junk") return Number(a.junkFee || 0) - Number(b.junkFee || 0);
+
     return getScore(b) - getScore(a);
   });
 
-  const lowest = sortedByPayment[0];
-  const best = sortedByScore[0];
+  return filtered;
+}
 
-  const averagePayment =
-    filteredDeals.reduce((sum, deal) => sum + calculateLease(deal).monthlyPayment, 0) / filteredDeals.length;
+function renderDashboard(filtered) {
+  const dashboard = document.getElementById("dashboard");
 
-  const junkCount = filteredDeals.filter(deal => Number(deal.junkFees || 0) > 0).length;
+  if (filtered.length === 0) {
+    dashboard.innerHTML = "";
+    return;
+  }
 
-  const totalRebates = filteredDeals.reduce((sum, deal) => {
-    return sum + totalManufacturerRebates(deal);
-  }, 0);
+  const byPayment = [...filtered].sort((a, b) => calculateLease(a).monthly - calculateLease(b).monthly);
+  const byScore = [...filtered].sort((a, b) => getScore(b) - getScore(a));
+
+  const best = byScore[0];
+  const lowest = byPayment[0];
+
+  const avgPayment =
+    filtered.reduce((sum, vehicle) => sum + calculateLease(vehicle).monthly, 0) / filtered.length;
+
+  const junkCount = filtered.filter(vehicle => Number(vehicle.junkFee || 0) > 0).length;
+
+  const avgDiscount =
+    filtered.reduce((sum, vehicle) => sum + calculateLease(vehicle).discountPercent, 0) / filtered.length;
 
   dashboard.innerHTML = `
-    <div class="stat-card stat-green">
+    <div class="stat green-border">
       <h3>Best Overall</h3>
       <strong>${best.dealerName || "Unknown"}</strong>
-      <span>${money(calculateLease(best).monthlyPayment)} / mo</span>
+      <span>${money(calculateLease(best).monthly)} / mo</span>
     </div>
 
-    <div class="stat-card">
+    <div class="stat">
       <h3>Lowest Payment</h3>
-      <strong>${money(calculateLease(lowest).monthlyPayment)}</strong>
-      <span>${lowest.dealerName || "Unknown Dealer"}</span>
+      <strong>${money(calculateLease(lowest).monthly)}</strong>
+      <span>${lowest.dealerName || "Unknown"}</span>
     </div>
 
-    <div class="stat-card">
+    <div class="stat">
       <h3>Average Payment</h3>
-      <strong>${money(averagePayment)}</strong>
-      <span>${filteredDeals.length} offers</span>
+      <strong>${money(avgPayment)}</strong>
+      <span>${filtered.length} saved vehicles</span>
     </div>
 
-    <div class="stat-card stat-red">
-      <h3>Junk Fee Offers</h3>
+    <div class="stat red-border">
+      <h3>With Junk Fees</h3>
       <strong>${junkCount}</strong>
-      <span>Marked in red</span>
+      <span>red warning</span>
     </div>
 
-    <div class="stat-card stat-yellow">
-      <h3>Total Rebates Entered</h3>
-      <strong>${money(totalRebates)}</strong>
-      <span>Manual manufacturer incentives</span>
+    <div class="stat yellow-border">
+      <h3>Average Discount</h3>
+      <strong>${avgDiscount.toFixed(1)}%</strong>
+      <span>dealer + rebate</span>
     </div>
   `;
 }
 
-function renderDeals() {
-  const list = document.getElementById("dealsList");
+function renderVehicles() {
+  const list = document.getElementById("vehiclesList");
+  const filtered = getFilteredVehicles();
 
-  const filteredDeals = deals
-    .filter(passesFilters)
-    .sort((a, b) => getScore(b) - getScore(a));
+  renderDashboard(filtered);
 
-  renderDashboard(filteredDeals);
-
-  if (filteredDeals.length === 0) {
-    list.innerHTML = `<div class="empty">No saved offers match your filters.</div>`;
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty">No vehicles saved yet. Search nearby dealers, paste a VIN/link, and add the car.</div>`;
     return;
   }
 
-  list.innerHTML = filteredDeals.map((deal, index) => {
-    const calc = calculateLease(deal);
-    const grade = getGrade(deal);
-    const isBest = index === 0;
-    const hasJunk = Number(deal.junkFees || 0) > 0;
+  list.innerHTML = filtered.map((vehicle, index) => {
+    const calc = calculateLease(vehicle);
+    const score = getScore(vehicle);
+    const grade = getGrade(vehicle);
+    const hasJunk = Number(vehicle.junkFee || 0) > 0;
 
     return `
-      <div class="deal-card ${isBest ? "best" : ""}">
-        <div class="deal-header">
-
-          <div class="deal-title">
-            <h3>${isBest ? "🏆 " : ""}#${index + 1} ${deal.vehicleName || "Unnamed Vehicle"}</h3>
+      <div class="vehicle-card ${index === 0 ? "best" : ""}">
+        <div class="vehicle-top">
+          <div class="vehicle-title">
+            <h3>${index === 0 ? "🏆 " : ""}#${index + 1} ${vehicle.vehicleName || `${vehicle.year} ${vehicle.brand} ${vehicle.model}`}</h3>
 
             <p>
-              <strong>VIN:</strong> ${deal.vin || "-"}
-              ${deal.vehicleLink ? ` | <a href="${deal.vehicleLink}" target="_blank">Open Listing</a>` : ""}
+              <strong>${vehicle.year} ${vehicle.brand} ${vehicle.model}</strong>
+              ${vehicle.trim && vehicle.trim !== "Any" ? ` | ${vehicle.trim}` : ""}
             </p>
 
             <p>
-              <strong>${deal.year || ""} ${deal.brand || ""} ${deal.model || ""}</strong>
-              ${deal.trim ? ` | ${deal.trim}` : ""}
+              <strong>VIN:</strong> ${vehicle.vin || "-"}
+              ${vehicle.listingLink ? ` | <a href="${vehicle.listingLink}" target="_blank">Open Listing</a>` : ""}
             </p>
 
             <p>
-              <strong>Color:</strong> ${deal.exteriorColor || "-"} / ${deal.interiorColor || "-"}
-              ${deal.drivetrain ? ` | <strong>Drive:</strong> ${deal.drivetrain}` : ""}
-              ${deal.seats ? ` | <strong>Seats:</strong> ${deal.seats}` : ""}
+              <strong>Dealer:</strong> ${vehicle.dealerName || "-"}
+              ${vehicle.dealerCity || vehicle.dealerState ? ` | ${vehicle.dealerCity || ""}, ${vehicle.dealerState || ""}` : ""}
             </p>
 
             <p>
-              <strong>Dealer:</strong> ${deal.dealerName || "-"}
-              ${deal.dealerCity || deal.dealerState ? ` | ${deal.dealerCity || ""}, ${deal.dealerState || ""}` : ""}
-            </p>
-
-            <p>
-              <strong>Contact:</strong>
-              ${deal.salesperson || "-"}
-              ${deal.dealerPhone ? ` | ${deal.dealerPhone}` : ""}
-              ${deal.dealerEmail ? ` | ${deal.dealerEmail}` : ""}
+              <strong>Search:</strong> ${vehicle.zipCode || "-"} within ${vehicle.radius || "-"} miles |
+              <strong>Color:</strong> ${vehicle.exteriorColor || "Any"} /
+              ${vehicle.interiorColor || "Any"}
             </p>
 
             <div class="badges">
-              <span class="badge badge-gray">${deal.status || "New Lead"}</span>
               <span class="badge ${hasJunk ? "badge-red" : "badge-green"}">
-                ${hasJunk ? "Junk Fees Found" : "No Junk Fees"}
+                ${hasJunk ? "Junk/Add-ons Found" : "No Junk Fees"}
               </span>
-              <span class="badge ${grade.includes("Bad") || grade.includes("Expensive") || grade.includes("Warning") ? "badge-red" : "badge-green"}">
+
+              <span class="badge ${grade.includes("Bad") || grade.includes("Warning") || grade.includes("Expensive") ? "badge-red" : "badge-green"}">
                 ${grade}
               </span>
-              ${featureBadges(deal)}
+
+              ${featureBadges(vehicle)}
             </div>
           </div>
 
           <div class="payment-box">
-            <div class="payment">${money(calc.monthlyPayment)}</div>
-            <div class="payment-label">Estimated Monthly Payment</div>
-            <div class="payment-label">Score: ${getScore(deal).toFixed(0)}</div>
+            <div class="payment">${money(calc.monthly)}</div>
+            <div class="small">Estimated monthly</div>
+            <div class="small">Score: ${score.toFixed(0)}</div>
           </div>
-
         </div>
 
-        <div class="numbers-grid">
-          <div class="data-box">
+        <div class="numbers">
+          <div class="data">
             <span>MSRP</span>
-            <strong>${money(deal.msrp)}</strong>
+            <strong>${money(vehicle.msrp)}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Dealer Discount</span>
-            <strong class="good-text">${money(deal.dealerDiscount)}</strong>
+            <strong class="good">${money(vehicle.dealerDiscount)}</strong>
           </div>
 
-          <div class="data-box">
-            <span>Total Rebates</span>
-            <strong class="good-text">${money(calc.rebates)}</strong>
+          <div class="data">
+            <span>Rebates</span>
+            <strong class="good">${money(calc.rebates)}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Junk Fees</span>
-            <strong class="${hasJunk ? "junk-text" : ""}">${money(deal.junkFees)}</strong>
+            <strong class="${hasJunk ? "bad" : ""}">${money(vehicle.junkFee)}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Total Fees</span>
             <strong>${money(calc.fees)}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Selling Price</span>
             <strong>${money(calc.sellingPrice)}</strong>
           </div>
 
-          <div class="data-box">
-            <span>Net Cap Cost</span>
-            <strong>${money(calc.netCapCost)}</strong>
+          <div class="data">
+            <span>Cap Cost</span>
+            <strong>${money(calc.capCost)}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Residual Value</span>
             <strong>${money(calc.residualValue)}</strong>
           </div>
 
-          <div class="data-box">
-            <span>Residual %</span>
-            <strong>${deal.residualPercent || 0}%</strong>
+          <div class="data">
+            <span>Residual</span>
+            <strong>${vehicle.residual || 0}%</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Money Factor</span>
-            <strong>${deal.moneyFactor || 0}</strong>
+            <strong>${vehicle.mf || 0}</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>APR Approx.</span>
-            <strong>${((Number(deal.moneyFactor || 0)) * 2400).toFixed(2)}%</strong>
+            <strong>${(Number(vehicle.mf || 0) * 2400).toFixed(2)}%</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
             <span>Term / Miles</span>
-            <strong>${deal.term || 0} mo / ${deal.miles || 0}</strong>
+            <strong>${vehicle.term || 0} mo / ${vehicle.miles || 0}</strong>
           </div>
 
-          <div class="data-box">
-            <span>Due At Signing</span>
-            <strong>${money(deal.dueAtSigning)}</strong>
-          </div>
-
-          <div class="data-box">
-            <span>Total Savings</span>
-            <strong class="good-text">${money(calc.totalSavings)}</strong>
-          </div>
-
-          <div class="data-box">
+          <div class="data">
             <span>Discount %</span>
             <strong>${calc.discountPercent.toFixed(2)}%</strong>
           </div>
 
-          <div class="data-box">
+          <div class="data">
+            <span>Total Discount</span>
+            <strong class="good">${money(calc.totalDiscount)}</strong>
+          </div>
+
+          <div class="data">
             <span>Rebate Expires</span>
-            <strong>${deal.rebateExpiration || "-"}</strong>
+            <strong>${vehicle.rebateExpiration || "-"}</strong>
           </div>
 
-          <div class="data-box">
-            <span>Lease Cash</span>
-            <strong>${money(deal.leaseCash)}</strong>
-          </div>
-
-          <div class="data-box">
-            <span>EV Credit</span>
-            <strong>${money(deal.evCredit)}</strong>
+          <div class="data">
+            <span>Down Payment</span>
+            <strong>${money(vehicle.downPayment)}</strong>
           </div>
         </div>
 
-        ${deal.rebateSourceLink ? `
-          <p>
-            <strong>Manufacturer Offer Source:</strong>
-            <a href="${deal.rebateSourceLink}" target="_blank">Open Rebate Source</a>
-          </p>
+        ${vehicle.rebateLink ? `
+          <p><strong>Rebate Source:</strong> <a href="${vehicle.rebateLink}" target="_blank">Open Offer Page</a></p>
         ` : ""}
 
-        ${deal.notes ? `
-          <div class="notes-box">
-            <strong>Notes:</strong> ${deal.notes}
+        ${vehicle.notes ? `
+          <div class="notes">
+            <strong>Notes:</strong> ${vehicle.notes}
           </div>
         ` : ""}
 
         <div class="actions">
-          <button class="btn primary" onclick="generateDealerMessage(${deal.id})">Generate Message</button>
-          <button class="btn secondary" onclick="editDeal(${deal.id})">Edit</button>
-          <button class="btn secondary" onclick="duplicateDeal(${deal.id})">Duplicate</button>
-          <button class="btn danger" onclick="deleteDeal(${deal.id})">Delete</button>
+          <button class="btn blue" onclick="generateMessage(${vehicle.id})">Generate Dealer Message</button>
+          <button class="btn gray" onclick="duplicateVehicle(${vehicle.id})">Duplicate</button>
+          <button class="btn red" onclick="deleteVehicle(${vehicle.id})">Delete</button>
         </div>
       </div>
     `;
   }).join("");
 }
 
-function generateDealerMessage(id) {
-  const deal = deals.find(item => item.id === id);
-  if (!deal) return;
+function generateMessage(id) {
+  const vehicle = vehicles.find(item => item.id === id);
+  if (!vehicle) return;
 
-  const calc = calculateLease(deal);
+  const calc = calculateLease(vehicle);
 
   const message = `Hello,
 
 My name is Zack.
 
-I am interested in leasing this vehicle:
+I am interested in this vehicle:
 
-${deal.vehicleName || ""}
-VIN: ${deal.vin || ""}
-Year/Make/Model: ${deal.year || ""} ${deal.brand || ""} ${deal.model || ""}
-Trim: ${deal.trim || ""}
-Exterior: ${deal.exteriorColor || ""}
-Interior: ${deal.interiorColor || ""}
-Link: ${deal.vehicleLink || ""}
+${vehicle.year} ${vehicle.brand} ${vehicle.model}
+Trim: ${vehicle.trim}
+VIN: ${vehicle.vin || ""}
+Exterior/Interior: ${vehicle.exteriorColor || ""} / ${vehicle.interiorColor || ""}
+Listing: ${vehicle.listingLink || ""}
 
 Please send me your best lease quote with a full itemized breakdown.
 
-The numbers I currently have are:
+Here are the numbers I am comparing:
 
-MSRP: ${money(deal.msrp)}
-Dealer Discount: ${money(deal.dealerDiscount)}
-
-Manufacturer Rebate: ${money(deal.manufacturerRebate)}
-Lease Cash: ${money(deal.leaseCash)}
-EV Credit: ${money(deal.evCredit)}
-Loyalty / Conquest: ${money(deal.loyaltyConquest)}
-Bonus Cash: ${money(deal.bonusCash)}
+MSRP: ${money(vehicle.msrp)}
+Dealer Discount: ${money(vehicle.dealerDiscount)}
+Manufacturer Rebate: ${money(vehicle.manufacturerRebate)}
+Lease Cash: ${money(vehicle.leaseCash)}
+EV Credit / Bonus: ${money(vehicle.evCredit)}
+Loyalty / Conquest: ${money(vehicle.loyaltyCash)}
 Total Rebates: ${money(calc.rebates)}
 
-Doc Fee: ${money(deal.docFee)}
-Acquisition Fee: ${money(deal.acquisitionFee)}
-DMV / Tag / Title: ${money(deal.dmvFee)}
-Dealer Add-ons / Junk Fees: ${money(deal.junkFees)}
+Doc Fee: ${money(vehicle.docFee)}
+Acquisition Fee: ${money(vehicle.acqFee)}
+DMV / Tag / Title: ${money(vehicle.dmvFee)}
+Dealer Add-ons / Junk Fees: ${money(vehicle.junkFee)}
 
-Residual: ${deal.residualPercent || 0}%
-Money Factor: ${deal.moneyFactor || 0}
-Term: ${deal.term || 0} months
-Miles: ${deal.miles || 0} per year
-Down Payment: ${money(deal.downPayment)}
-Due At Signing: ${money(deal.dueAtSigning)}
+Residual: ${vehicle.residual || 0}%
+Money Factor: ${vehicle.mf || 0}
+Term: ${vehicle.term || 0} months
+Miles: ${vehicle.miles || 0} per year
+Down Payment: ${money(vehicle.downPayment)}
 
-Based on these numbers, my estimated payment is:
-${money(calc.monthlyPayment)} per month.
+Based on these numbers, my estimated monthly payment is:
+${money(calc.monthly)} per month.
 
 Please confirm:
 
 1. Selling price before rebates
-2. All manufacturer rebates included
-3. Dealer discount
-4. Money factor
-5. Residual
+2. Dealer discount
+3. All manufacturer rebates included
+4. Residual
+5. Money factor
 6. Acquisition fee
 7. Doc fee
-8. DMV, tag, and title fees
-9. Any dealer add-ons or required packages
+8. DMV/tag/title fees
+9. Any dealer add-ons or protection packages
 10. Total due at signing
 11. Final monthly payment including tax
 
@@ -702,150 +712,122 @@ Please remove any optional dealer add-ons or packages.
 
 Thank you.`;
 
-  document.getElementById("dealerMessageText").value = message;
+  document.getElementById("dealerMessage").value = message;
   document.getElementById("messageModal").classList.remove("hidden");
 }
 
-function closeModal() {
+function closeMessage() {
   document.getElementById("messageModal").classList.add("hidden");
 }
 
-function copyDealerMessage() {
-  const box = document.getElementById("dealerMessageText");
+function copyMessage() {
+  const box = document.getElementById("dealerMessage");
   box.select();
   document.execCommand("copy");
   alert("Message copied.");
 }
 
-function loadDemoData() {
-  const demoDeals = [
+function loadDemoCars() {
+  const demoSearch = {
+    zipCode: "29577",
+    radius: "250",
+    brand: "Hyundai",
+    model: "IONIQ 9",
+    trim: "Performance Limited",
+    year: "2026",
+    exteriorColor: "White",
+    interiorColor: "Gray",
+    features: {
+      sunroof: true,
+      panoramic: true,
+      heatedWheel: true,
+      captainChairs: true,
+      ventilatedSeats: true,
+      hud: true,
+      awd: true,
+      towPackage: false
+    }
+  };
+
+  vehicles = [
     {
       id: Date.now() + 1,
-      vehicleName: "2026 Hyundai IONIQ 9 Performance Limited White/Gray",
+      ...demoSearch,
       vin: "7YAMWFS55TY010209",
-      vehicleLink: "https://www.hyundaiusa.com/us/en/offers",
-      brand: "Hyundai",
-      model: "IONIQ 9",
-      year: 2026,
-      trim: "Performance Limited",
-      exteriorColor: "White",
-      interiorColor: "Gray",
-      drivetrain: "AWD",
-      seats: "6 Seats",
-      status: "Quoted",
-
+      listingLink: "https://www.hyundaiusa.com/us/en/offers",
       dealerName: "Hyundai of Columbia",
       dealerCity: "Columbia",
       dealerState: "SC",
-      salesperson: "",
-      dealerPhone: "",
-      dealerEmail: "",
-
-      manufacturerRebate: 0,
-      leaseCash: 12700,
+      vehicleName: "White Performance Limited / Gray Interior",
+      manufacturerRebate: 10000,
+      leaseCash: 0,
       evCredit: 0,
-      loyaltyConquest: 0,
-      bonusCash: 0,
-      rebateExpiration: "",
-      rebateSourceLink: "https://www.hyundaiusa.com/us/en/offers",
-
+      loyaltyCash: 0,
+      rebateExpiration: "Verify",
+      rebateLink: "https://www.hyundaiusa.com/us/en/offers",
       msrp: 74020,
       dealerDiscount: 4000,
       docFee: 499,
-      acquisitionFee: 650,
+      acqFee: 650,
       dmvFee: 300,
-      junkFees: 0,
-      tradeCredit: 0,
-      downPayment: 0,
-      dueAtSigning: 0,
-      residualPercent: 58,
-      moneyFactor: 0.00222,
+      junkFee: 0,
+      residual: 58,
+      mf: 0.00222,
       term: 36,
       miles: 10000,
-      taxPercent: 0,
-
-      features: {
-        sunroof: true,
-        heatedWheel: true,
-        captainChairs: true,
-        ventilatedSeats: true,
-        hud: true,
-        premiumSound: true,
-        towPackage: false,
-        thirdRow: true,
-        panoramicRoof: true,
-        preferredColor: true
-      },
-
-      notes: "Demo offer. Update numbers with real dealer worksheet.",
-      updatedAt: new Date().toLocaleString()
+      downPayment: 0,
+      taxRate: 0,
+      notes: "Demo good deal. No junk fees entered.",
+      createdAt: new Date().toLocaleString()
     },
     {
       id: Date.now() + 2,
-      vehicleName: "2026 Hyundai IONIQ 9 SEL Gray/Black",
-      vin: "7YAMUFS35TY002213",
-      vehicleLink: "https://www.hyundaiusa.com/us/en/offers",
-      brand: "Hyundai",
-      model: "IONIQ 9",
-      year: 2026,
+      ...demoSearch,
       trim: "SEL",
       exteriorColor: "Gray",
       interiorColor: "Black",
-      drivetrain: "AWD",
-      seats: "7 Seats",
-      status: "Waiting For Quote",
-
-      dealerName: "AutoNation Hyundai Columbia",
-      dealerCity: "Columbia",
-      dealerState: "SC",
-      salesperson: "",
-      dealerPhone: "",
-      dealerEmail: "",
-
-      manufacturerRebate: 0,
-      leaseCash: 10000,
-      evCredit: 0,
-      loyaltyConquest: 0,
-      bonusCash: 0,
-      rebateExpiration: "",
-      rebateSourceLink: "https://www.hyundaiusa.com/us/en/offers",
-
-      msrp: 62000,
-      dealerDiscount: 2500,
-      docFee: 599,
-      acquisitionFee: 650,
-      dmvFee: 300,
-      junkFees: 1295,
-      tradeCredit: 0,
-      downPayment: 0,
-      dueAtSigning: 0,
-      residualPercent: 60,
-      moneyFactor: 0.0021,
-      term: 36,
-      miles: 10000,
-      taxPercent: 0,
-
       features: {
         sunroof: false,
+        panoramic: false,
         heatedWheel: true,
         captainChairs: false,
         ventilatedSeats: false,
         hud: false,
-        premiumSound: false,
-        towPackage: false,
-        thirdRow: true,
-        panoramicRoof: false,
-        preferredColor: true
+        awd: true,
+        towPackage: false
       },
-
-      notes: "Demo with junk fee to show red warning.",
-      updatedAt: new Date().toLocaleString()
+      vin: "7YAMUFS35TY002213",
+      listingLink: "https://www.autonationhyundaicolumbia.com/",
+      dealerName: "AutoNation Hyundai Columbia",
+      dealerCity: "Columbia",
+      dealerState: "SC",
+      vehicleName: "Gray SEL / Black Interior",
+      manufacturerRebate: 10000,
+      leaseCash: 0,
+      evCredit: 0,
+      loyaltyCash: 0,
+      rebateExpiration: "Verify",
+      rebateLink: "https://www.hyundaiusa.com/us/en/offers",
+      msrp: 62000,
+      dealerDiscount: 2500,
+      docFee: 599,
+      acqFee: 650,
+      dmvFee: 300,
+      junkFee: 1295,
+      residual: 60,
+      mf: 0.0021,
+      term: 36,
+      miles: 10000,
+      downPayment: 0,
+      taxRate: 0,
+      notes: "Demo warning deal. Dealer add-ons entered to show red flag.",
+      createdAt: new Date().toLocaleString()
     }
   ];
 
-  deals = demoDeals;
   saveStorage();
-  renderDeals();
+  renderVehicles();
 }
 
-renderDeals();
+updateModels();
+renderVehicles();
