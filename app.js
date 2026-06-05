@@ -12,6 +12,12 @@ let removedVins = new Set();
 let favoriteVins = new Set();
 let selectedVins = new Set();
 let lastSearchBody = null;
+let activeResultFilters = {
+  dealer: new Set(),
+  trim: new Set(),
+  exterior: new Set(),
+  interior: new Set(),
+};
 
 const ZIP_COORDS = {
   "29577": { city: "Myrtle Beach", state: "SC", latitude: 33.6891, longitude: -78.8867 },
@@ -103,6 +109,10 @@ function percent(value) {
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
 }
 
+function moneyFactorApr(value) {
+  return number(value) ? `${(number(value) * 2400).toFixed(2)}% APR equiv.` : "Verify";
+}
+
 function authHeaders(extra = {}) {
   return {
     apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -130,6 +140,17 @@ function sameText(a, b) {
 function setResultsSource(text) {
   const el = document.getElementById("resultsSource");
   if (el) el.textContent = text || "";
+}
+
+function setSearchUiState(state) {
+  const isIdle = state === "idle";
+  const isLoading = state === "loading";
+  const isResults = state === "results";
+
+  document.getElementById("emptyState")?.classList.toggle("hidden", !isIdle);
+  document.getElementById("loadingPanel")?.classList.toggle("hidden", !isLoading);
+  document.getElementById("searchSummary")?.classList.toggle("hidden", !isResults);
+  document.getElementById("resultsHead")?.classList.toggle("hidden", !isResults);
 }
 
 function getTaxRule(state) {
@@ -207,38 +228,30 @@ function normalizeStickerUrl(v) {
 }
 
 function calculateLeaseQuote(v) {
-  const state = document.getElementById("registrationState")?.value || "SC";
   const msrp = number(v.msrp);
-  const rebate = number(v.manufacturer_rebate);
-  const projectedDealerDiscount = number(v.projected_dealer_discount);
-  const dealerFees = number(v.doc_fee) + number(v.acquisition_fee) + number(v.dealer_addons_amount || v.junk_fee);
-  const preTaxPrice = Math.max(0, msrp - projectedDealerDiscount - rebate + dealerFees);
-  const taxInfo = calculateTax(preTaxPrice, state);
+  const incentive = number(v.manufacturer_rebate);
+  const dealerDocFee = number(v.doc_fee);
+  const bankAcquisitionFee = number(v.acquisition_fee);
+  const dealerAddons = number(v.dealer_addons_amount || v.junk_fee);
+  const publicCapCost = Math.max(0, msrp - incentive + bankAcquisitionFee);
   const residualPercent = number(v.residual_percent);
   const residualValue = msrp * (residualPercent / 100);
   const term = number(v.term || document.getElementById("term")?.value || 36);
   const moneyFactor = number(v.money_factor);
-  const adjustedCapCost = preTaxPrice + taxInfo.tax + taxInfo.govFees;
-  const depreciation = term ? Math.max(0, adjustedCapCost - residualValue) / term : 0;
-  const financeCharge = (adjustedCapCost + residualValue) * moneyFactor;
+  const depreciation = term ? Math.max(0, publicCapCost - residualValue) / term : 0;
+  const financeCharge = (publicCapCost + residualValue) * moneyFactor;
   const monthlyPayment = depreciation + financeCharge;
 
   return {
     msrp,
-    rebate,
-    projectedDealerDiscount,
-    dealerFees,
-    govFees: taxInfo.govFees,
-    tax: taxInfo.tax,
-    taxRule: taxInfo.label,
-    taxNote: taxInfo.note,
-    taxRate: taxInfo.rate,
-    preTaxPrice,
-    projectedPrice: adjustedCapCost,
+    incentive,
+    dealerDocFee,
+    bankAcquisitionFee,
+    dealerAddons,
+    publicCapCost,
     residualPercent,
     residualValue,
     monthlyPayment,
-    dueAtSigning: monthlyPayment,
     term,
   };
 }
@@ -493,39 +506,80 @@ function loadColorOptions() {
   buildCheckPills("interiorColorOptions", interior.length ? interior : ["Any"], "interiorColor", true);
 }
 
-function setSelectOptions(selectId, values) {
-  const select = document.getElementById(selectId);
-  if (!select) return;
-
-  select.innerHTML = [`<option value="Any">Any</option>`]
-    .concat(unique(values.filter(Boolean)).sort().map((value) => `<option value="${value}">${value}</option>`))
-    .join("");
-}
-
 function buildResultFilters() {
   const panel = document.getElementById("resultFilters");
-  const offerPanel = document.getElementById("offerPanel");
+  const box = document.getElementById("filterChips");
   if (!panel) return;
 
   if (!vehicles.length) {
     panel.classList.add("hidden");
-    if (offerPanel) offerPanel.classList.add("hidden");
+    if (box) box.innerHTML = "";
     return;
   }
 
-  setSelectOptions("dealerFilter", vehicles.map((v) => v.dealer_name || "Dealer"));
-  setSelectOptions("trimFilter", vehicles.map((v) => v.trim));
-  setSelectOptions("exteriorFilter", vehicles.map((v) => v.exterior_color));
-  setSelectOptions("interiorFilter", vehicles.map((v) => v.interior_color));
+  const groups = [
+    ["dealer", "Dealer", vehicles.map((v) => v.dealer_name || "Dealer")],
+    ["trim", "Trim", vehicles.map((v) => v.trim)],
+    ["exterior", "Exterior", vehicles.map((v) => v.exterior_color)],
+    ["interior", "Interior", vehicles.map((v) => v.interior_color)],
+  ];
+
+  if (box) {
+    box.innerHTML = `
+      ${groups
+        .map(([key, label, values]) => {
+          const options = unique(values.filter(Boolean)).sort();
+          if (!options.length) return "";
+
+          return `
+            <div class="chip-group">
+              <b>${label}</b>
+              <div class="chip-row">
+                ${options
+                  .map((value) => {
+                    const checked = activeResultFilters[key].has(value);
+                    return `
+                      <label class="filter-chip ${checked ? "active" : ""}">
+                        <input type="checkbox" ${checked ? "checked" : ""} onchange="toggleResultFilter('${key}', '${encodeURIComponent(value)}', this.checked)" />
+                        ${value}
+                      </label>
+                    `;
+                  })
+                  .join("")}
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+      <div class="filter-actions">
+        <button type="button" class="secondary-btn" onclick="sendSelectedBidRequests()">Invite Selected Dealers</button>
+        <button type="button" class="ghost-btn" onclick="clearResultFilters()">Clear Filters</button>
+      </div>
+    `;
+  }
+
   panel.classList.remove("hidden");
-  if (offerPanel) offerPanel.classList.remove("hidden");
 }
 
 function clearResultFilters() {
-  ["dealerFilter", "trimFilter", "exteriorFilter", "interiorFilter"].forEach((id) => {
-    const select = document.getElementById(id);
-    if (select) select.value = "Any";
+  Object.keys(activeResultFilters).forEach((key) => {
+    activeResultFilters[key] = new Set();
   });
+  buildResultFilters();
+  renderVehicles();
+}
+
+function toggleResultFilter(key, encodedValue, checked) {
+  const value = decodeURIComponent(encodedValue);
+  if (!activeResultFilters[key]) return;
+
+  if (checked) {
+    activeResultFilters[key].add(value);
+  } else {
+    activeResultFilters[key].delete(value);
+  }
+
+  buildResultFilters();
   renderVehicles();
 }
 
@@ -556,9 +610,10 @@ async function loadProgramsForSelectedCar() {
 
 function renderRebateOptions() {
   const box = document.getElementById("rebateOptions");
+  if (!box) return;
 
   if (!rebatesCatalog.length) {
-    box.innerHTML = `<span class="muted">No manufacturer rebates available for this car.</span>`;
+    box.innerHTML = `<span class="muted">No manufacturer incentives available for this car.</span>`;
     return;
   }
 
@@ -625,15 +680,10 @@ function applyFilters() {
 }
 
 function matchesLocalFilters(v) {
-  const dealer = document.getElementById("dealerFilter")?.value || "Any";
-  const trim = document.getElementById("trimFilter")?.value || "Any";
-  const exterior = document.getElementById("exteriorFilter")?.value || "Any";
-  const interior = document.getElementById("interiorFilter")?.value || "Any";
-
-  const dealerOk = dealer === "Any" || sameText(v.dealer_name || "Dealer", dealer);
-  const trimOk = trim === "Any" || sameText(v.trim, trim);
-  const extOk = exterior === "Any" || sameText(v.exterior_color, exterior);
-  const intOk = interior === "Any" || sameText(v.interior_color, interior);
+  const dealerOk = !activeResultFilters.dealer.size || activeResultFilters.dealer.has(v.dealer_name || "Dealer");
+  const trimOk = !activeResultFilters.trim.size || activeResultFilters.trim.has(v.trim);
+  const extOk = !activeResultFilters.exterior.size || activeResultFilters.exterior.has(v.exterior_color);
+  const intOk = !activeResultFilters.interior.size || activeResultFilters.interior.has(v.interior_color);
 
   return dealerOk && trimOk && extOk && intOk;
 }
@@ -655,7 +705,7 @@ function renderDealerCoverage(body) {
     <div class="section-head">
       <div>
         <h2>Dealers In Radius</h2>
-        <p>${dealers.length} active ${body.brand} dealers found within ${body.radius} miles. Cars shown below depend on scanned or cached inventory.</p>
+        <p>${dealers.length} active ${body.brand} dealers found within ${body.radius} miles. A dealer can be in range even when its inventory has not been imported yet.</p>
       </div>
     </div>
     <div class="dealer-chip-grid">
@@ -666,7 +716,7 @@ function renderDealerCoverage(body) {
             <div class="dealer-chip ${hasCars ? "has-cars" : ""}">
               <b>${dealer.name}</b>
               <span>${dealer.city || ""}${dealer.state ? ", " + dealer.state : ""}${dealer.distance_miles ? " - " + dealer.distance_miles + " miles" : ""}</span>
-              <em>${hasCars ? "Inventory matched" : "No matching cars loaded yet"}</em>
+              <em>${hasCars ? "Inventory loaded" : "Dealer found, inventory not loaded"}</em>
             </div>
           `;
         })
@@ -686,8 +736,8 @@ async function scanBackendInventory() {
   document.getElementById("vehicleCount").textContent = "0";
   document.getElementById("programStatus").textContent = "Checking";
   document.getElementById("resultFilters")?.classList.add("hidden");
-  document.getElementById("offerPanel")?.classList.add("hidden");
   document.getElementById("dealerCoverage")?.classList.add("hidden");
+  setSearchUiState("loading");
   setResultsSource("");
 
   const body = {
@@ -753,6 +803,12 @@ async function scanBackendInventory() {
 
     removedVins = new Set();
     selectedVins = new Set();
+    activeResultFilters = {
+      dealer: new Set(),
+      trim: new Set(),
+      exterior: new Set(),
+      interior: new Set(),
+    };
     updateSelectedCount();
     buildResultFilters();
     renderDealerCoverage(body);
@@ -761,10 +817,12 @@ async function scanBackendInventory() {
     document.getElementById("vehicleCount").textContent = data.count || 0;
 
     renderProgramStatus(data);
+    setSearchUiState("results");
     renderVehicles();
   } catch (error) {
     alert("Search failed: " + error.message);
     document.getElementById("programStatus").textContent = "Error";
+    setSearchUiState("idle");
   } finally {
     btn.disabled = false;
     btn.textContent = "Search Lease Deals";
@@ -772,36 +830,15 @@ async function scanBackendInventory() {
 }
 
 function renderProgramStatus(data) {
-  const box = document.getElementById("programBox");
   const status = document.getElementById("programStatus");
   const program = data.lease_program;
 
-  box.classList.remove("hidden");
-
   if (!program || !program.verified) {
     status.textContent = "Not verified";
-    box.innerHTML = `
-      <div>
-        <b>Lease Program</b>
-        <span>Residual ${program?.residual_percent ? program.residual_percent + "%" : "not available"}</span>
-        <span>Tier 1 MF ${program?.money_factor || "not available"}</span>
-        <span>Expires ${program?.expires_at || "Unknown"}</span>
-        <span>Not verified from manufacturer/finance source yet.</span>
-      </div>
-    `;
     return;
   }
 
   status.textContent = "Verified";
-
-  box.innerHTML = `
-    <div>
-      <b>Lease Program Verified</b>
-      <span>Residual ${program.residual_percent}%</span>
-      <span>Tier 1 MF ${program.money_factor}</span>
-      <span>Expires ${program.expires_at || "Unknown"}</span>
-    </div>
-  `;
 }
 
 function groupByDealer(list) {
@@ -865,7 +902,6 @@ function renderVehicleCard(v) {
   const isFavorite = favoriteVins.has(v.vin);
   const isSelected = selectedVins.has(v.vin);
   const showInvoice = v.invoice_verified && Number(v.invoice_price || 0) > 0;
-  const downInputId = `down_${v.vin}`;
   const stickerUrl = normalizeStickerUrl(v);
 
   return `
@@ -901,36 +937,23 @@ function renderVehicleCard(v) {
 
         <div class="price-box">
           <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
-          <div><span>Dealer Advertised Price</span><b>${money(v.sale_price)}</b></div>
-          <div><span>Projected Dealer Discount</span><b>${money(quote.projectedDealerDiscount)}</b></div>
-          <div><span>Rebates Applied</span><b>${money(quote.rebate)}</b></div>
+          <div><span>Dealer Website Price</span><b>${money(v.sale_price)}</b></div>
+          <div><span>Manufacturer Incentive</span><b>${quote.incentive ? money(quote.incentive) : "None found"}</b></div>
           ${showInvoice ? `<div><span>Invoice</span><b>${money(v.invoice_price)}</b></div>` : ""}
           ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
-          <div><span>Projected Price</span><b>${money(quote.projectedPrice)}</b></div>
-          <div><span>Sales Tax Est.</span><b>${money(quote.tax)}</b></div>
           <div class="${docFeeHigh ? "fee-bad" : ""}"><span>Doc Fee</span><b>${money(v.doc_fee || 0)}</b></div>
-          <div><span>Gov Fees Est.</span><b>${money(quote.govFees)}</b></div>
-          <div><span>Dealer / Acq Fees</span><b>${money(quote.dealerFees)}</b></div>
+          <div><span>Bank Acquisition Fee</span><b>${money(v.acquisition_fee || 0)}</b></div>
+          <div><span>Known Add-ons</span><b>${dealerAddons ? money(dealerAddons) : "None found"}</b></div>
           <div><span>Residual</span><b>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</b></div>
           <div><span>Residual Value</span><b>${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
-          <div><span>Tier 1 MF</span><b>${v.money_factor ? v.money_factor : "Verify"}</b></div>
-          <div><span>Est. Payment</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
-          <div><span>Due at Signing</span><b id="due_${v.vin}">${money(basePayment || 0)}</b></div>
-        </div>
-
-        <div class="down-box">
-          <label>Adjust Down Payment</label>
-          <div class="down-slider-row">
-            <input id="${downInputId}" type="range" value="0" min="0" max="10000" step="250" oninput="recalculatePayment('${v.vin}')" />
-            <b id="down_value_${v.vin}">$0</b>
-          </div>
-          <small>$0 down shows payment with first payment due at signing.</small>
+          <div><span>Tier 1 MF</span><b>${v.money_factor ? `${v.money_factor} (${moneyFactorApr(v.money_factor)})` : "Verify"}</b></div>
+          <div><span>Public Base Estimate</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
         </div>
 
         <div class="formula-box">
-          <b>Projected Lease Basis</b>
-          <span>MSRP - projected dealer discount - rebates + dealer/acquisition fees + estimated government fees + estimated sales tax. Dealer advertised price is shown for reference, not used as the negotiation baseline.</span>
-          <span>Filing, electronic registration, and dealer-specific state fees may be added or corrected by the dealer bid.</span>
+          <b>Estimate Disclaimer</b>
+          <span>Public base estimate uses available MSRP, manufacturer incentive, residual, money factor, and bank acquisition fee when known.</span>
+          <span>Before additional dealer discount, taxes, registration/government fees, dealer add-ons, and final dealer documents. Final numbers must be checked with the dealer before signing.</span>
         </div>
 
         ${
@@ -946,13 +969,13 @@ function renderVehicleCard(v) {
         }
 
         <div class="rebate-list">
-          <b>Available Manufacturer Offers</b>
+          <b>Available Manufacturer Incentives</b>
           ${
             (v.available_rebates?.length || raw.available_rebates?.length)
               ? (v.available_rebates || raw.available_rebates)
                   .map((r) => `<span>${r.rebate_name}: ${money(r.amount)}${r.customer_must_qualify ? " · must qualify" : ""}${r.verified ? " · verified" : " · not verified"}</span>`)
                   .join("")
-              : `<span>No manufacturer rebates available for this car.</span>`
+              : `<span>No manufacturer incentives available for this car.</span>`
           }
         </div>
 
@@ -972,24 +995,7 @@ function renderVehicleCard(v) {
 }
 
 function recalculatePayment(vin) {
-  const v = vehicles.find((x) => x.vin === vin);
-  if (!v) return;
-
-  const down = Number(document.getElementById(`down_${vin}`)?.value || 0);
-  const quote = calculateLeaseQuote(v);
-  const term = Number(quote.term || v.term || 36);
-  const base = Number(quote.monthlyPayment || v.base_monthly_payment || v.estimated_payment || 0);
-
-  if (!base || !term) return;
-
-  const newPayment = Math.max(0, base - down / term);
-  const due = newPayment + down;
-
-  const downValue = document.getElementById(`down_value_${vin}`);
-  if (downValue) downValue.textContent = money(down);
-
-  document.getElementById(`pay_${vin}`).textContent = money(newPayment) + "/mo";
-  document.getElementById(`due_${vin}`).textContent = money(due);
+  return vin;
 }
 
 function toggleFavorite(vin) {
@@ -1036,32 +1042,36 @@ function toggleTradeIn(enabled) {
 
   if (addBtn) addBtn.classList.toggle("hidden", enabled);
   if (removeBtn) removeBtn.classList.toggle("hidden", !enabled);
-  if (status) status.textContent = enabled ? "Trade added" : "No trade added";
+  if (status) status.textContent = enabled ? "Trade added" : "Tell dealers what to expect.";
 
   if (!enabled) {
-    ["tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment"].forEach((id) => {
+    ["tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradeKbbValue", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment"].forEach((id) => {
       const input = document.getElementById(id);
       if (input) input.value = "";
     });
 
     const condition = document.getElementById("tradeCondition");
     if (condition) condition.value = "";
+    const loanType = document.getElementById("tradeLoanType");
+    if (loanType) loanType.value = "";
   }
 }
 
 function validateContactInfo() {
-  const name = document.getElementById("customerName")?.value.trim();
+  const firstName = document.getElementById("customerFirstName")?.value.trim();
+  const lastName = document.getElementById("customerLastName")?.value.trim();
   const phone = document.getElementById("customerPhone")?.value.trim();
   const email = document.getElementById("customerEmail")?.value.trim();
   const missing = [];
 
-  if (!name) missing.push("name");
+  if (!firstName) missing.push("first name");
+  if (!lastName) missing.push("last name");
   if (!phone) missing.push("phone");
   if (!email) missing.push("email");
 
   if (missing.length) {
     alert(`Please add buyer ${missing.join(", ")} before inviting a dealer.`);
-    document.getElementById("customerName")?.focus();
+    document.getElementById("customerFirstName")?.focus();
     return false;
   }
 
@@ -1077,7 +1087,9 @@ function getTradeData() {
     license_plate: document.getElementById("tradePlate").value.trim(),
     plate_state: document.getElementById("tradePlateState").value.trim(),
     mileage: Number(document.getElementById("tradeMileage").value || 0),
+    kbb_expected_value: Number(document.getElementById("tradeKbbValue").value || 0),
     condition: document.getElementById("tradeCondition").value,
+    loan_type: document.getElementById("tradeLoanType").value,
     payoff_amount: Number(document.getElementById("tradePayoff").value || 0),
     payments_left: Number(document.getElementById("tradePaymentsLeft").value || 0),
     monthly_payment: Number(document.getElementById("tradeMonthlyPayment").value || 0),
@@ -1091,9 +1103,11 @@ function getTradeData() {
 
 function buildBidPayload(v) {
   const tradeIn = getTradeData();
+  const firstName = document.getElementById("customerFirstName").value.trim();
+  const lastName = document.getElementById("customerLastName").value.trim();
 
   return {
-    customer_name: document.getElementById("customerName").value.trim(),
+    customer_name: `${firstName} ${lastName}`.trim(),
     customer_phone: document.getElementById("customerPhone").value.trim(),
     customer_email: document.getElementById("customerEmail").value.trim(),
 
@@ -1110,6 +1124,13 @@ function buildBidPayload(v) {
 
     selected_features: {
       selected_rebates: getSelectedRebates(),
+      customer_profile: {
+        first_name: firstName,
+        last_name: lastName,
+        credit_score_range: document.getElementById("creditScoreRange").value,
+        preferred_term: Number(document.getElementById("term").value || 0),
+        preferred_miles: Number(document.getElementById("miles").value || 0),
+      },
       vin: v.vin,
       dealer_name: v.dealer_name,
       listing_url: v.listing_url,
@@ -1198,16 +1219,15 @@ Miles: ${document.getElementById("miles").value} miles/year
 Credit score range: ${document.getElementById("creditScoreRange").value}
 
 Please send your best lease offer and break out:
-Selling price before rebates
+Selling price before incentives
 Dealer discount
-All rebates
+All manufacturer incentives
 Dealer add-ons/accessories
 Doc fee
-Acquisition fee
+Bank acquisition fee
 Residual
-Tier 1 money factor
+Tier 1 money factor and APR equivalent
 Taxes and registration
-Total due at signing
 Monthly payment
 
 Thank you.
@@ -1224,7 +1244,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadCatalog();
     await loadAllColors();
     await refreshModelFilters();
-    renderVehicles();
+    setSearchUiState("idle");
   } catch (error) {
     setConnectionStatus("error", "Error");
     document.getElementById("vehicleList").innerHTML = `<div class="empty-box">Connection failed: ${error.message}</div>`;

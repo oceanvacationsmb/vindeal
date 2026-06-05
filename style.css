@@ -38,6 +38,8 @@ body {
 .dealer-box,
 .vehicle-card,
 .empty-box,
+.empty-state,
+.loading-panel,
 .program-preview,
 .dealer-coverage,
 .result-filters,
@@ -352,6 +354,49 @@ body {
   margin-bottom: 16px;
 }
 
+.empty-state,
+.loading-panel {
+  min-height: 320px;
+  padding: 28px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  color: #64748b;
+}
+
+.empty-state h2 {
+  color: #172033;
+  margin: 0 0 8px;
+}
+
+.empty-state p,
+.loading-panel span {
+  max-width: 520px;
+  margin: 0;
+}
+
+.loading-panel strong {
+  color: #172033;
+  margin-top: 14px;
+  font-size: 18px;
+}
+
+.loader {
+  width: 46px;
+  height: 46px;
+  border: 5px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .results-head > .small-note {
   grid-column: 1 / -1;
 }
@@ -396,6 +441,47 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(170px, 1fr));
   gap: 12px;
+}
+
+.chip-group {
+  margin-bottom: 14px;
+}
+
+.chip-group b {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.filter-chip.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.filter-chip input {
+  width: 15px;
+  height: 15px;
 }
 
 .dealer-results {
