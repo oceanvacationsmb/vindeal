@@ -10,13 +10,18 @@
   <header class="topbar">
     <div>
       <h1>VINDeal</h1>
-      <p>Find real lease deals near you.</p>
+      <p>Find real lease deals, compare dealer pricing, and invite dealers to bid.</p>
     </div>
   </header>
 
   <main class="container">
     <section class="search-panel">
-      <h2>Search Lease Deals</h2>
+      <div class="section-head">
+        <div>
+          <h2>Search Deals</h2>
+          <p>Choose what you want. VINDeal scans dealer inventory and shows deal cards.</p>
+        </div>
+      </div>
 
       <div class="form-grid">
         <div class="field">
@@ -25,7 +30,7 @@
         </div>
 
         <div class="field">
-          <label>Distance</label>
+          <label>Radius</label>
           <select id="radius">
             <option value="25">25 miles</option>
             <option value="50" selected>50 miles</option>
@@ -53,6 +58,14 @@
         </div>
 
         <div class="field">
+          <label>Deal Type</label>
+          <select id="dealType" onchange="toggleLeaseFields()">
+            <option value="lease" selected>Lease</option>
+            <option value="purchase">Purchase</option>
+          </select>
+        </div>
+
+        <div class="field">
           <label>Make</label>
           <select id="brand" onchange="updateModelOptions()"></select>
         </div>
@@ -64,20 +77,29 @@
 
         <div class="field">
           <label>Trim</label>
-          <select id="trim"></select>
+          <select id="trim" onchange="updateYearOptions(); loadFeatureOptions();"></select>
         </div>
 
         <div class="field">
+          <label>Year</label>
+          <select id="year"></select>
+        </div>
+
+        <div class="field lease-only">
           <label>Lease Term</label>
           <select id="term">
+            <option value="12">12 months</option>
+            <option value="18">18 months</option>
             <option value="24">24 months</option>
+            <option value="33">33 months</option>
             <option value="36" selected>36 months</option>
             <option value="39">39 months</option>
+            <option value="42">42 months</option>
             <option value="48">48 months</option>
           </select>
         </div>
 
-        <div class="field">
+        <div class="field lease-only">
           <label>Miles Per Year</label>
           <select id="miles">
             <option value="7500">7,500</option>
@@ -86,46 +108,70 @@
             <option value="15000">15,000</option>
           </select>
         </div>
+
+        <div class="field lease-only">
+          <label>Credit Score Range</label>
+          <select id="creditScoreRange">
+            <option value="760+" selected>760+</option>
+            <option value="720-759">720-759</option>
+            <option value="680-719">680-719</option>
+            <option value="640-679">640-679</option>
+            <option value="600-639">600-639</option>
+            <option value="below 600">Below 600</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Exterior Color</label>
+          <select id="exteriorColor">
+            <option value="Any" selected>Any</option>
+            <option value="White">White</option>
+            <option value="Black">Black</option>
+            <option value="Gray">Gray</option>
+            <option value="Silver">Silver</option>
+            <option value="Blue">Blue</option>
+            <option value="Red">Red</option>
+            <option value="Green">Green</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Interior Color</label>
+          <select id="interiorColor">
+            <option value="Any" selected>Any</option>
+            <option value="Black">Black</option>
+            <option value="Gray">Gray</option>
+            <option value="Beige">Beige</option>
+            <option value="Brown">Brown</option>
+            <option value="White">White</option>
+          </select>
+        </div>
       </div>
 
-      <details class="advanced-box">
-        <summary>Optional filters</summary>
+      <div class="feature-panel">
+        <div class="feature-title">Features</div>
+        <div id="featureOptions" class="feature-grid">
+          <span class="muted">Loading features...</span>
+        </div>
+      </div>
 
-        <div class="form-grid">
+      <details class="contact-box">
+        <summary>Contact info for dealer bid request</summary>
+
+        <div class="form-grid contact-grid">
           <div class="field">
-            <label>Exterior Color</label>
-            <select id="exteriorColor">
-              <option value="Any" selected>Any</option>
-              <option value="White">White</option>
-              <option value="Black">Black</option>
-              <option value="Gray">Gray</option>
-              <option value="Silver">Silver</option>
-              <option value="Blue">Blue</option>
-              <option value="Red">Red</option>
-              <option value="Green">Green</option>
-            </select>
+            <label>Name</label>
+            <input id="customerName" type="text" placeholder="Your name" />
           </div>
 
           <div class="field">
-            <label>Interior Color</label>
-            <select id="interiorColor">
-              <option value="Any" selected>Any</option>
-              <option value="Black">Black</option>
-              <option value="Gray">Gray</option>
-              <option value="Beige">Beige</option>
-              <option value="Brown">Brown</option>
-              <option value="White">White</option>
-            </select>
+            <label>Phone</label>
+            <input id="customerPhone" type="text" placeholder="Phone" />
           </div>
 
           <div class="field">
-            <label>Year</label>
-            <select id="year"></select>
-          </div>
-
-          <div class="field">
-            <label>Features</label>
-            <input id="features" type="text" placeholder="AWD, captains chairs, pano roof" />
+            <label>Email</label>
+            <input id="customerEmail" type="email" placeholder="Email" />
           </div>
         </div>
       </details>
@@ -135,29 +181,31 @@
 
     <section class="summary-row">
       <div class="summary-card">
-        <span>Dealers</span>
+        <span>Dealers Scanned</span>
         <strong id="dealerCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Cars</span>
+        <span>Cars Found</span>
         <strong id="vehicleCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Program</span>
+        <span>Lease Program</span>
         <strong id="programStatus">Not checked</strong>
       </div>
     </section>
 
     <section id="programBox" class="program-box hidden"></section>
 
-    <section>
+    <section class="results-head">
       <h2>Results</h2>
-      <div id="vehicleList" class="vehicle-grid"></div>
+      <p>Dealer pricing, rebates, add-ons, invoice if available, residual, and Tier 1 MF.</p>
     </section>
+
+    <section id="vehicleList" class="vehicle-grid"></section>
   </main>
 
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>
