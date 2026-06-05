@@ -4,6 +4,68 @@ const SCAN_INVENTORY_URL = `${SUPABASE_URL}/functions/v1/scan-inventory`;
 
 let vehicles = JSON.parse(localStorage.getItem("vindealVehicles") || "[]");
 
+const makeModelData = {
+  Hyundai: {
+    "IONIQ 9": ["Any", "S", "SE", "SEL", "Limited", "Performance Limited", "Calligraphy"],
+    "IONIQ 5": ["Any", "SE", "SEL", "Limited"],
+    "IONIQ 6": ["Any", "SE", "SEL", "Limited"],
+    Palisade: ["Any", "SE", "SEL", "Limited", "Calligraphy"],
+    Tucson: ["Any", "SE", "SEL", "Limited"],
+    SantaFe: ["Any", "SE", "SEL", "Limited", "Calligraphy"],
+  },
+  Kia: {
+    EV9: ["Any", "Light", "Wind", "Land", "GT-Line"],
+    EV6: ["Any", "Light", "Wind", "GT-Line", "GT"],
+    Telluride: ["Any", "LX", "S", "EX", "SX", "SX Prestige"],
+    Sorento: ["Any", "LX", "S", "EX", "SX", "SX Prestige"],
+  },
+  Honda: {
+    Prologue: ["Any", "EX", "Touring", "Elite"],
+    Pilot: ["Any", "Sport", "EX-L", "TrailSport", "Touring", "Elite"],
+    Passport: ["Any", "EX-L", "TrailSport", "Black Edition"],
+    CRV: ["Any", "LX", "EX", "EX-L", "Sport", "Sport Touring"],
+  },
+};
+
+function updateModelOptions() {
+  const brand = document.getElementById("brand").value;
+  const modelSelect = document.getElementById("model");
+
+  const models = Object.keys(makeModelData[brand] || {});
+
+  modelSelect.innerHTML = models
+    .map((model) => `<option value="${model}">${model}</option>`)
+    .join("");
+
+  if (brand === "Hyundai") {
+    modelSelect.value = "IONIQ 9";
+  }
+
+  if (brand === "Kia") {
+    modelSelect.value = "EV9";
+  }
+
+  if (brand === "Honda") {
+    modelSelect.value = "Prologue";
+  }
+
+  updateTrimOptions();
+}
+
+function updateTrimOptions() {
+  const brand = document.getElementById("brand").value;
+  const model = document.getElementById("model").value;
+  const trimSelect = document.getElementById("trim");
+
+  const trims = makeModelData[brand]?.[model] || ["Any"];
+
+  trimSelect.innerHTML = trims
+    .map((trim) => `<option value="${trim}">${trim}</option>`)
+    .join("");
+
+  trimSelect.value = "Any";
+}
+
 function money(value) {
   return Number(value || 0).toLocaleString("en-US", {
     style: "currency",
@@ -66,10 +128,24 @@ async function scanBackendInventory() {
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
+    const rawText = await response.text();
 
-    if (!data.ok) {
-      alert("Scan failed: " + (data.error || "Unknown error"));
+    let data = null;
+
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      alert("Backend did not return JSON. Status: " + response.status + "\n\n" + rawText.slice(0, 500));
+      return;
+    }
+
+    if (!response.ok || !data.ok) {
+      alert(
+        "Scan failed.\n\nStatus: " +
+          response.status +
+          "\n\nResponse:\n" +
+          JSON.stringify(data, null, 2)
+      );
       return;
     }
 
@@ -110,7 +186,7 @@ async function scanBackendInventory() {
 
     alert(`Scan complete. Found ${data.count} vehicles.`);
   } catch (error) {
-    alert("Error scanning inventory: " + error.message);
+    alert("Error scanning inventory:\n\n" + error.message);
   } finally {
     if (searchBtn) {
       searchBtn.disabled = false;
@@ -297,4 +373,7 @@ function clearVehicles() {
   renderVehicles();
 }
 
-document.addEventListener("DOMContentLoaded", renderVehicles);
+document.addEventListener("DOMContentLoaded", () => {
+  updateModelOptions();
+  renderVehicles();
+});
