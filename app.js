@@ -631,7 +631,11 @@ function updateYearOptions() {
 
 async function refreshModelFilters() {
   loadColorOptions();
-  await loadProgramsForSelectedCar();
+  try {
+    await loadProgramsForSelectedCar();
+  } catch (error) {
+    console.warn("Program/incentive preload failed", error);
+  }
 }
 
 function buildCheckPills(boxId, values, name, checkedAny = true) {
@@ -853,6 +857,8 @@ function renderRebateOptions() {
 
 function renderProgramPreview() {
   const box = document.getElementById("programPreview");
+  if (!box) return;
+
   box.classList.remove("hidden");
 
   if (!leaseProgramPreview) {
