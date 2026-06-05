@@ -272,6 +272,20 @@
           <input id="customerEmail" type="email" placeholder="Email" />
         </div>
 
+        <div class="field wide-field">
+          <label>Address</label>
+          <input id="customerAddress" type="text" placeholder="Street, city, state, ZIP" />
+        </div>
+
+        <div class="field">
+          <label>Preferred Communication</label>
+          <select id="preferredCommunication">
+            <option value="text" selected>Text</option>
+            <option value="phone">Phone</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+
         <div class="field">
           <label>Credit Range</label>
           <select id="creditScoreRange">
@@ -304,10 +318,32 @@
         </div>
       </div>
 
+      <div class="profile-section">
+        <b>Buyer Incentive Qualifications</b>
+        <p>Select anything the buyer may qualify for. Dealer and manufacturer must verify before applying.</p>
+        <div class="qualification-grid">
+          <label><input type="checkbox" name="buyerQualification" value="First responder" /> First responder</label>
+          <label><input type="checkbox" name="buyerQualification" value="Military" /> Military</label>
+          <label><input type="checkbox" name="buyerQualification" value="College graduate/student" /> College graduate/student</label>
+          <label><input type="checkbox" name="buyerQualification" value="Education employee" /> Education employee</label>
+          <label><input type="checkbox" name="buyerQualification" value="Healthcare employee" /> Healthcare employee</label>
+          <label><input type="checkbox" name="buyerQualification" value="Current same-brand owner/loyalty" /> Current same-brand owner/loyalty</label>
+          <label><input type="checkbox" name="buyerQualification" value="Conquest owner" /> Conquest owner</label>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <b>Available Manufacturer Incentives</b>
+        <p>Select public manufacturer incentives the buyer may qualify for.</p>
+        <div id="rebateOptions" class="rebate-options">
+          <span class="muted">Choose a vehicle search first.</span>
+        </div>
+      </div>
+
       <button type="button" class="secondary-btn full-btn" onclick="closeProfileModal()">Save Profile</button>
     </div>
   </div>
 
-  <script src="app.js?v=83"></script>
+  <script src="app.js?v=84"></script>
 </body>
 </html>

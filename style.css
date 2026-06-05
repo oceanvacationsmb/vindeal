@@ -294,6 +294,53 @@ body {
   margin-top: 14px;
 }
 
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.profile-section {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 13px;
+}
+
+.profile-section b,
+.profile-section p {
+  display: block;
+}
+
+.profile-section p {
+  margin: 4px 0 10px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.qualification-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.qualification-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid #dbe4ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rebate-options {
+  display: grid;
+  gap: 8px;
+}
+
 #scanBtn {
   width: 100%;
   margin-top: 14px;
@@ -817,6 +864,7 @@ body {
   background: #f8fafc;
   border-radius: 12px;
   padding: 10px;
+  position: relative;
 }
 
 .price-box div.fee-bad {
@@ -825,7 +873,9 @@ body {
 }
 
 .price-box span {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: #64748b;
 }
@@ -833,6 +883,56 @@ body {
 .price-box b {
   display: block;
   margin-top: 4px;
+}
+
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: help;
+  flex: 0 0 auto;
+}
+
+.help-window {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 30;
+  display: none;
+  width: min(280px, 70vw);
+  transform: translateX(-50%);
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 10px 11px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.help-window::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: #0f172a;
+}
+
+.help-tip:hover .help-window,
+.help-tip:focus .help-window {
+  display: block;
 }
 
 .down-box {
@@ -1072,7 +1172,7 @@ body {
   border-radius: 18px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   padding: 18px;
-  margin-bottom: 18px;
+  margin: 18px 0;
 }
 
 .compare-grid {
@@ -1153,6 +1253,7 @@ body {
   .form-grid,
   .summary-row,
   .filter-grid,
+  .qualification-grid,
   .mini-grid {
     grid-template-columns: 1fr;
   }

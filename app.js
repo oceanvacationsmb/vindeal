@@ -317,19 +317,6 @@ function detectDealerAddons(v) {
   return Math.max(explicit, accessoryTotal);
 }
 
-function conditionalIncentiveText(v) {
-  const raw = v.raw_data || {};
-  const priceLibrary = raw.price_library || {};
-  const conditional = number(
-    priceLibrary["PriceStak Line-Item Incentives - Conditional"] ||
-      priceLibrary.calc_OEM_Savings_Conditional ||
-      priceLibrary["calc_OEM Savings Conditional"]
-  );
-
-  if (!conditional) return "";
-  return `Conditional incentives detected on dealer page: ${money(conditional)}. Buyer must qualify and dealer must verify.`;
-}
-
 function vehicleIncentiveRows(v) {
   const raw = v.raw_data || {};
   const rows = [];
@@ -353,12 +340,44 @@ function vehicleIncentiveRows(v) {
     );
   });
 
-  const conditional = conditionalIncentiveText(v);
-  if (conditional) {
-    addRow("Conditional incentives detected", raw.price_library?.["PriceStak Line-Item Incentives - Conditional"], "May include military, first responder, student, loyalty, or other programs. Buyer must qualify.");
-  }
-
   return rows;
+}
+
+const PRICE_HELP = {
+  msrp: "Manufacturer Suggested Retail Price. This is the sticker price from the manufacturer before dealer discount, incentives, taxes, fees, or add-ons.",
+  dealerWebsitePrice: "The advertised price shown on the dealer website. Dealers may include, exclude, or condition this price with incentives, add-ons, or fine print, so VINDeal does not use it as the lease cap cost.",
+  websiteReference: "A reference copy of the dealer advertised price. It helps compare dealers, but the public lease estimate is built from MSRP, verified incentives, residual, money factor, and bank fee.",
+  adjustedCapCost: "Estimated lease cap cost before dealer discount: MSRP - verified manufacturer incentive + bank acquisition fee. Dealer discount, taxes, government fees, doc fee, add-ons, and final documents are not included here.",
+  manufacturerIncentive: "Public manufacturer incentive currently attached to this vehicle/program. Extra conditional incentives require buyer qualification and dealer/manufacturer verification.",
+  invoice: "Dealer invoice, when verified. This is an internal wholesale-like reference and may not include holdback, marketing support, or other dealer programs.",
+  overInvoice: "Difference between the public price reference and verified invoice. Use this only as negotiation context.",
+  docFee: "Dealer documentation/processing fee. This is charged by the dealer and should be separated from bank acquisition fee and government fees.",
+  bankAcquisitionFee: "Bank acquisition fee charged by the lease lender. It is shown separately so buyers know what the bank charges.",
+  dealerAddons: "Dealer accessories or add-ons detected from stored vehicle data. This can include accessories, protection packages, or other dealer-installed products when available.",
+  residual: "Residual percentage from the lease program. It estimates what the bank says the vehicle will be worth at lease end.",
+  residualValue: "Residual dollar value = MSRP x residual percentage. This is used in the lease depreciation calculation.",
+  moneyFactor: "Money factor from the lease program. APR equivalent is estimated as money factor x 2400, but final approval depends on credit and lender decision.",
+  baseProgram: "The basic public lease program used for this card, such as 36 months / 10,000 miles or 12,000 miles depending on the stored/loaded program.",
+  estimatedMonthly: "Estimated monthly payment from public lease math: depreciation charge plus rent charge, before dealer discount, taxes, government fees, doc fee, add-ons, and final dealer documents.",
+  totalPayments: "Estimated monthly payment multiplied by the base lease term. It does not include amount due at signing, taxes, registration, doc fee, dealer add-ons, or final lender/dealer changes.",
+};
+
+function helpTip(text) {
+  return `
+    <span class="help-tip" tabindex="0" aria-label="${text}">
+      ?
+      <span class="help-window">${text}</span>
+    </span>
+  `;
+}
+
+function priceItem(label, value, helpKey, className = "") {
+  return `
+    <div class="${className}">
+      <span>${label}${helpTip(PRICE_HELP[helpKey] || "Dealer must verify final numbers.")}</span>
+      <b>${value}</b>
+    </div>
+  `;
 }
 
 function normalizeStickerUrl(v) {
@@ -871,7 +890,7 @@ function renderRebateOptions() {
           <input type="checkbox" value="${r.id}" ${checked} />
           <span>
             <b>${r.rebate_name}</b>
-            <em>${money(r.amount)} · ${mustQualify} · ${verified} · Expires ${r.expires_at || "Unknown"}</em>
+            <em>${money(r.amount)} - ${mustQualify} - ${verified} - Expires ${r.expires_at || "Unknown"}</em>
           </span>
         </label>
       `;
@@ -918,6 +937,10 @@ function getSelectedRebates() {
   return [...document.querySelectorAll("#rebateOptions input[type='checkbox']:checked")]
     .map((input) => rebatesCatalog.find((r) => r.id === input.value))
     .filter(Boolean);
+}
+
+function getBuyerQualifications() {
+  return [...document.querySelectorAll("input[name='buyerQualification']:checked")].map((input) => input.value);
 }
 
 function applyFilters() {
@@ -1119,7 +1142,6 @@ function renderVehicles() {
   const grouped = groupByDealer(visibleVehicles);
 
   list.innerHTML = `
-    <section id="comparePanel" class="compare-panel hidden"></section>
     ${Object.entries(grouped)
     .map(([dealerName, dealerVehicles]) => {
       const first = dealerVehicles[0];
@@ -1130,7 +1152,7 @@ function renderVehicles() {
           <div class="dealer-box-head">
             <div>
               <h3>${dealerName}</h3>
-              <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""} ${first.dealer_distance_miles ? " · " + first.dealer_distance_miles + " miles away" : ""}</p>
+              <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""} ${first.dealer_distance_miles ? " - " + first.dealer_distance_miles + " miles away" : ""}</p>
               <div class="dealer-meta">
                 <span>${dealerRatingText(meta)}</span>
                 <span>${meta.phone || "Phone not loaded"}</span>
@@ -1149,6 +1171,7 @@ function renderVehicles() {
       `;
     })
     .join("")}
+    <section id="comparePanel" class="compare-panel hidden"></section>
   `;
 
   renderComparePanel();
@@ -1178,8 +1201,8 @@ function renderVehicleCard(v) {
             : `<div class="no-image">No Image</div>`
         }
 
-        <button class="heart-btn ${isFavorite ? "active" : ""}" onclick="toggleFavorite('${v.vin}')">♥</button>
-        <button class="remove-btn" onclick="removeVehicle('${v.vin}')">×</button>
+        <button class="heart-btn ${isFavorite ? "active" : ""}" aria-label="Favorite" onclick="toggleFavorite('${v.vin}')">+</button>
+        <button class="remove-btn" aria-label="Remove" onclick="removeVehicle('${v.vin}')">x</button>
       </div>
 
       <div class="vehicle-body">
@@ -1201,22 +1224,22 @@ function renderVehicleCard(v) {
         </div>
 
         <div class="price-box">
-          <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
-          <div><span>Dealer Website Price</span><b>${money(v.sale_price)}</b></div>
-          <div><span>Website Price Reference</span><b>${money(quote.fairMarketPrice)}</b></div>
-          <div><span>Adjusted Cap Cost Est.</span><b>${money(quote.adjustedCapCost)}</b></div>
-          <div><span>Manufacturer Incentive</span><b>${quote.incentive ? money(quote.incentive) : "None found"}</b></div>
-          ${showInvoice ? `<div><span>Invoice</span><b>${money(v.invoice_price)}</b></div>` : ""}
-          ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
-          <div class="${docFeeHigh ? "fee-bad" : ""}"><span>Doc Fee</span><b>${money(v.doc_fee || 0)}</b></div>
-          <div><span>Bank Acquisition Fee</span><b>${money(v.acquisition_fee || 0)}</b></div>
-          <div><span>Known Add-ons</span><b>${dealerAddons ? money(dealerAddons) : "None found"}</b></div>
-          <div><span>Residual</span><b>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</b></div>
-          <div><span>Residual Value</span><b id="residual_value_${v.vin}">${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
-          <div><span>Tier 1 MF</span><b id="mf_${v.vin}">${quote.monthlyPayment ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify"}</b></div>
-          <div><span>Base Program</span><b>${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi</b></div>
-          <div><span>Estimated Monthly</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
-          <div><span>Total Payments</span><b id="total_pay_${v.vin}">${basePayment ? money(basePayment * quote.term) : "Verify"}</b></div>
+          ${priceItem("MSRP", money(v.msrp), "msrp")}
+          ${priceItem("Dealer Website Price", money(v.sale_price), "dealerWebsitePrice")}
+          ${priceItem("Website Price Reference", money(quote.fairMarketPrice), "websiteReference")}
+          ${priceItem("Adjusted Cap Cost Est.", money(quote.adjustedCapCost), "adjustedCapCost")}
+          ${priceItem("Manufacturer Incentive", quote.incentive ? money(quote.incentive) : "None found", "manufacturerIncentive")}
+          ${showInvoice ? priceItem("Invoice", money(v.invoice_price), "invoice") : ""}
+          ${showInvoice ? priceItem("Over Invoice", money(v.profit_over_invoice), "overInvoice") : ""}
+          ${priceItem("Doc Fee", money(v.doc_fee || 0), "docFee", docFeeHigh ? "fee-bad" : "")}
+          ${priceItem("Bank Acquisition Fee", money(v.acquisition_fee || 0), "bankAcquisitionFee")}
+          ${priceItem("Known Add-ons", dealerAddons ? money(dealerAddons) : "None found", "dealerAddons")}
+          ${priceItem("Residual", quote.residualPercent ? `${quote.residualPercent}%` : "Verify", "residual")}
+          ${priceItem("Residual Value", quote.residualValue ? money(quote.residualValue) : "Verify", "residualValue")}
+          ${priceItem("Money Factor", quote.monthlyPayment ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify", "moneyFactor")}
+          ${priceItem("Base Program", `${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi`, "baseProgram")}
+          ${priceItem("Estimated Monthly", basePayment ? money(basePayment) + "/mo" : "Verify", "estimatedMonthly")}
+          ${priceItem("Total Payments", basePayment ? money(basePayment * quote.term) : "Verify", "totalPayments")}
         </div>
 
         <div class="lease-scenario">
@@ -1240,7 +1263,7 @@ function renderVehicleCard(v) {
         <div class="formula-box">
           <b>Estimate Disclaimer</b>
           <span>Lease structure: adjusted cap cost = MSRP - manufacturer incentive + bank acquisition fee. Estimated monthly = depreciation charge plus rent charge.</span>
-          <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) × money factor.</span>
+          <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) x money factor.</span>
           <span>Before dealer discount, taxes, registration/government fees, doc fee, dealer add-ons, and final dealer documents.</span>
         </div>
 
@@ -1364,10 +1387,18 @@ function renderComparePanel() {
               <span>${v.dealer_name || "Dealer"}</span>
               <div><small>MSRP</small><strong>${money(v.msrp)}</strong></div>
               <div><small>Website Price</small><strong>${money(v.sale_price)}</strong></div>
+              <div><small>Adjusted Cap Cost</small><strong>${money(quote.adjustedCapCost)}</strong></div>
               <div><small>Incentive</small><strong>${quote.incentive ? money(quote.incentive) : "None"}</strong></div>
+              <div><small>Estimated Monthly</small><strong>${quote.monthlyPayment ? `${money(quote.monthlyPayment)}/mo` : "Verify"}</strong></div>
+              <div><small>Total Payments</small><strong>${quote.totalPayments ? money(quote.totalPayments) : "Verify"}</strong></div>
+              <div><small>Base Program</small><strong>${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi</strong></div>
               <div><small>Residual</small><strong>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</strong></div>
-              <div><small>MF</small><strong>${v.money_factor ? `${v.money_factor} / ${moneyFactorApr(v.money_factor)}` : "Verify"}</strong></div>
+              <div><small>Residual Value</small><strong>${quote.residualValue ? money(quote.residualValue) : "Verify"}</strong></div>
+              <div><small>MF</small><strong>${quote.moneyFactor ? `${quote.moneyFactor} / ${moneyFactorApr(quote.moneyFactor)}` : "Verify"}</strong></div>
+              <div><small>Doc Fee</small><strong>${money(v.doc_fee || 0)}</strong></div>
+              <div><small>Bank Acquisition</small><strong>${money(v.acquisition_fee || 0)}</strong></div>
               <div><small>Add-ons</small><strong>${addons ? money(addons) : "None found"}</strong></div>
+              <div><small>Sticker</small><strong>${v.window_sticker_url ? "PDF available" : "N/A"}</strong></div>
             </div>
           `;
         })
@@ -1511,12 +1542,16 @@ function buildBidPayload(v) {
   const tradeIn = getTradeData();
   const firstName = document.getElementById("customerFirstName").value.trim();
   const lastName = document.getElementById("customerLastName").value.trim();
+  const selectedRebates = getSelectedRebates();
+  const buyerQualifications = getBuyerQualifications();
   const targetDetails = updateTargetPayment(v.vin);
 
   return {
     customer_name: `${firstName} ${lastName}`.trim(),
     customer_phone: document.getElementById("customerPhone").value.trim(),
     customer_email: document.getElementById("customerEmail").value.trim(),
+    customer_address: document.getElementById("customerAddress")?.value.trim() || "",
+    preferred_communication: document.getElementById("preferredCommunication")?.value || "text",
 
     zip_code: document.getElementById("zipCode").value.trim(),
     registration_state: document.getElementById("registrationState").value,
@@ -1530,10 +1565,13 @@ function buildBidPayload(v) {
     interior_color: v.interior_color,
 
     selected_features: {
-      selected_rebates: getSelectedRebates(),
+      selected_rebates: selectedRebates,
+      buyer_qualifications: buyerQualifications,
       customer_profile: {
         first_name: firstName,
         last_name: lastName,
+        address: document.getElementById("customerAddress")?.value.trim() || "",
+        preferred_communication: document.getElementById("preferredCommunication")?.value || "text",
         credit_score_range: document.getElementById("creditScoreRange").value,
         preferred_term: Number(document.getElementById("term").value || 0),
         preferred_miles: Number(document.getElementById("miles").value || 0),
@@ -1611,8 +1649,26 @@ function copyMessage(vin) {
 
   if (!v) return;
 
+  const firstName = document.getElementById("customerFirstName")?.value.trim() || "";
+  const lastName = document.getElementById("customerLastName")?.value.trim() || "";
+  const address = document.getElementById("customerAddress")?.value.trim() || "";
+  const phone = document.getElementById("customerPhone")?.value.trim() || "";
+  const email = document.getElementById("customerEmail")?.value.trim() || "";
+  const preferredCommunication = document.getElementById("preferredCommunication")?.value || "text";
+  const selectedRebates = getSelectedRebates();
+  const selectedRebateText = selectedRebates.length
+    ? selectedRebates.map((r) => `${r.rebate_name} (${money(r.amount)})`).join(", ")
+    : "Please verify available manufacturer incentives.";
+  const qualificationText = getBuyerQualifications().length ? getBuyerQualifications().join(", ") : "None selected";
+
   const message = `
 Hello,
+
+My name is ${`${firstName} ${lastName}`.trim() || "[buyer name]"}.
+Address: ${address || "[address]"}
+Phone: ${phone || "[phone]"}
+Email: ${email || "[email]"}
+Preferred communication: ${preferredCommunication}
 
 I am interested in this vehicle:
 
@@ -1625,16 +1681,18 @@ Dealer listing: ${v.listing_url || ""}
 Lease term: ${document.getElementById("term").value} months
 Miles: ${document.getElementById("miles").value} miles/year
 Credit score range: ${document.getElementById("creditScoreRange").value}
+Buyer incentive qualifications: ${qualificationText}
+Available manufacturer incentives selected: ${selectedRebateText}
 
 Please send your best lease offer and break out:
 Selling price before incentives
 Dealer discount
-All manufacturer incentives
+Available manufacturer incentives
 Dealer add-ons/accessories
 Doc fee
 Bank acquisition fee
 Residual
-Tier 1 money factor and APR equivalent
+Money factor and APR equivalent based on my credit score, subject to lender approval
 Taxes and registration
 Monthly payment
 
