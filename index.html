@@ -3,29 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VINDeal - Lease Deal Hunter</title>
+  <title>VINDeal</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>VINDeal</h1>
-      <p>Find lease deals near you and invite dealers to bid.</p>
+      <p>Find real lease deals near you.</p>
     </div>
   </header>
 
   <main class="container">
     <section class="search-panel">
-      <h2>Find My Lease Deal</h2>
+      <h2>Search Lease Deals</h2>
 
-      <div class="form-grid simple-grid">
+      <div class="form-grid">
         <div class="field">
-          <label for="zipCode">ZIP Code</label>
-          <input id="zipCode" type="text" placeholder="29577" value="29577" />
+          <label>ZIP Code</label>
+          <input id="zipCode" type="text" value="29577" />
         </div>
 
         <div class="field">
-          <label for="radius">Distance</label>
+          <label>Distance</label>
           <select id="radius">
             <option value="25">25 miles</option>
             <option value="50" selected>50 miles</option>
@@ -38,7 +38,7 @@
         </div>
 
         <div class="field">
-          <label for="registrationState">Registering State</label>
+          <label>Registering State</label>
           <select id="registrationState">
             <option value="SC" selected>South Carolina</option>
             <option value="NC">North Carolina</option>
@@ -53,26 +53,22 @@
         </div>
 
         <div class="field">
-          <label for="brand">Make</label>
-          <select id="brand" onchange="updateModelOptions()">
-            <option value="Hyundai" selected>Hyundai</option>
-            <option value="Kia">Kia</option>
-            <option value="Honda">Honda</option>
-          </select>
+          <label>Make</label>
+          <select id="brand" onchange="updateModelOptions()"></select>
         </div>
 
         <div class="field">
-          <label for="model">Model</label>
+          <label>Model</label>
           <select id="model" onchange="updateTrimOptions()"></select>
         </div>
 
         <div class="field">
-          <label for="trim">Trim</label>
+          <label>Trim</label>
           <select id="trim"></select>
         </div>
 
         <div class="field">
-          <label for="term">Lease Term</label>
+          <label>Lease Term</label>
           <select id="term">
             <option value="24">24 months</option>
             <option value="36" selected>36 months</option>
@@ -82,7 +78,7 @@
         </div>
 
         <div class="field">
-          <label for="miles">Miles Per Year</label>
+          <label>Miles Per Year</label>
           <select id="miles">
             <option value="7500">7,500</option>
             <option value="10000" selected>10,000</option>
@@ -97,7 +93,7 @@
 
         <div class="form-grid">
           <div class="field">
-            <label for="exteriorColor">Exterior Color</label>
+            <label>Exterior Color</label>
             <select id="exteriorColor">
               <option value="Any" selected>Any</option>
               <option value="White">White</option>
@@ -111,7 +107,7 @@
           </div>
 
           <div class="field">
-            <label for="interiorColor">Interior Color</label>
+            <label>Interior Color</label>
             <select id="interiorColor">
               <option value="Any" selected>Any</option>
               <option value="Black">Black</option>
@@ -123,17 +119,13 @@
           </div>
 
           <div class="field">
-            <label for="year">Year</label>
-            <select id="year">
-              <option value="2026" selected>2026</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
-            </select>
+            <label>Year</label>
+            <select id="year"></select>
           </div>
 
           <div class="field">
-            <label for="features">Must-have features</label>
-            <input id="features" type="text" placeholder="Example: captains chairs, AWD, pano roof" />
+            <label>Features</label>
+            <input id="features" type="text" placeholder="AWD, captains chairs, pano roof" />
           </div>
         </div>
       </details>
@@ -143,17 +135,17 @@
 
     <section class="summary-row">
       <div class="summary-card">
-        <span>Dealers Scanned</span>
+        <span>Dealers</span>
         <strong id="dealerCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Cars Found</span>
+        <span>Cars</span>
         <strong id="vehicleCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Lease Program</span>
+        <span>Program</span>
         <strong id="programStatus">Not checked</strong>
       </div>
     </section>
@@ -162,10 +154,10 @@
 
     <section>
       <h2>Results</h2>
-      <div id="vehicleList" class="vehicle-list"></div>
+      <div id="vehicleList" class="vehicle-grid"></div>
     </section>
   </main>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
