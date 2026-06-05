@@ -122,20 +122,6 @@
       </div>
 
       <div class="filter-box">
-        <div class="filter-title">Exterior Colors</div>
-        <div id="exteriorColorOptions" class="pill-grid"></div>
-      </div>
-
-      <div class="filter-box">
-        <div class="filter-title">Interior Colors</div>
-        <div id="interiorColorOptions" class="pill-grid"></div>
-      </div>
-
-      <div class="filter-actions">
-        <button type="button" class="secondary-btn" onclick="applyFilters()">Apply Filters</button>
-      </div>
-
-      <div class="filter-box">
         <div class="filter-title">Manufacturer Rebates / Qualifying Offers</div>
         <p class="small-note">General rebates are checked automatically. Select only extra offers you qualify for.</p>
         <div id="rebateOptions" class="rebate-grid"></div>
@@ -143,7 +129,12 @@
 
       <div id="programPreview" class="program-preview hidden"></div>
 
-      <details class="trade-box">
+      <div class="trade-actions">
+        <button type="button" class="secondary-btn" onclick="toggleTradeIn(true)">Add Trade-In</button>
+        <button type="button" class="ghost-btn" onclick="toggleTradeIn(false)">Remove Trade-In</button>
+      </div>
+
+      <details id="tradeBox" class="trade-box hidden">
         <summary>Optional trade-in</summary>
 
         <div class="form-grid contact-grid">
@@ -243,6 +234,11 @@
         <span>Supabase</span>
         <strong id="connectionStatus" class="connection-status checking">Checking</strong>
       </div>
+
+      <div class="summary-card">
+        <span>Selected Cars</span>
+        <strong id="selectedCount">0</strong>
+      </div>
     </section>
 
     <section id="programBox" class="program-box hidden"></section>
@@ -253,9 +249,43 @@
       <p id="resultsSource" class="small-note"></p>
     </section>
 
+    <section id="dealerCoverage" class="dealer-coverage hidden"></section>
+
+    <section id="resultFilters" class="result-filters hidden">
+      <div class="filter-title">Filter Found Cars</div>
+
+      <div class="filter-grid">
+        <div class="field">
+          <label>Dealer</label>
+          <select id="dealerFilter" onchange="applyFilters()"></select>
+        </div>
+
+        <div class="field">
+          <label>Trim</label>
+          <select id="trimFilter" onchange="applyFilters()"></select>
+        </div>
+
+        <div class="field">
+          <label>Exterior</label>
+          <select id="exteriorFilter" onchange="applyFilters()"></select>
+        </div>
+
+        <div class="field">
+          <label>Interior</label>
+          <select id="interiorFilter" onchange="applyFilters()"></select>
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button type="button" class="secondary-btn" onclick="applyFilters()">Apply Filters</button>
+        <button type="button" class="ghost-btn" onclick="clearResultFilters()">Clear</button>
+        <button type="button" class="secondary-btn" onclick="sendSelectedBidRequests()">Invite Selected Dealers</button>
+      </div>
+    </section>
+
     <section id="vehicleList" class="dealer-results"></section>
   </main>
 
-  <script src="app.js?v=72"></script>
+  <script src="app.js?v=74"></script>
 </body>
 </html>
