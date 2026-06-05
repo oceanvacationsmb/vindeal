@@ -7,35 +7,53 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="app-header">
+  <header class="topbar">
     <div>
       <h1>VINDeal</h1>
-      <p>Real inventory lease deal hunter</p>
+      <p>Find lease deals near you and invite dealers to bid.</p>
     </div>
   </header>
 
   <main class="container">
-    <section class="card">
-      <h2>Search Inventory</h2>
+    <section class="search-panel">
+      <h2>Find My Lease Deal</h2>
 
-      <div class="grid">
+      <div class="form-grid simple-grid">
         <div class="field">
-          <label>ZIP Code</label>
-          <input id="zipCode" value="29577" />
+          <label for="zipCode">ZIP Code</label>
+          <input id="zipCode" type="text" placeholder="29577" value="29577" />
         </div>
 
         <div class="field">
-          <label>Radius</label>
+          <label for="radius">Distance</label>
           <select id="radius">
-            <option value="50">50 miles</option>
+            <option value="25">25 miles</option>
+            <option value="50" selected>50 miles</option>
             <option value="100">100 miles</option>
-            <option value="250" selected>250 miles</option>
+            <option value="250">250 miles</option>
             <option value="500">500 miles</option>
+            <option value="1000">1000 miles</option>
+            <option value="3000">Nationwide</option>
           </select>
         </div>
 
         <div class="field">
-          <label>Make</label>
+          <label for="registrationState">Registering State</label>
+          <select id="registrationState">
+            <option value="SC" selected>South Carolina</option>
+            <option value="NC">North Carolina</option>
+            <option value="GA">Georgia</option>
+            <option value="FL">Florida</option>
+            <option value="VA">Virginia</option>
+            <option value="NY">New York</option>
+            <option value="NJ">New Jersey</option>
+            <option value="CA">California</option>
+            <option value="TX">Texas</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="brand">Make</label>
           <select id="brand" onchange="updateModelOptions()">
             <option value="Hyundai" selected>Hyundai</option>
             <option value="Kia">Kia</option>
@@ -44,123 +62,17 @@
         </div>
 
         <div class="field">
-          <label>Model</label>
+          <label for="model">Model</label>
           <select id="model" onchange="updateTrimOptions()"></select>
         </div>
 
         <div class="field">
-          <label>Trim</label>
+          <label for="trim">Trim</label>
           <select id="trim"></select>
         </div>
 
         <div class="field">
-          <label>Year</label>
-          <select id="year">
-            <option value="2026" selected>2026</option>
-            <option value="2025">2025</option>
-            <option value="2027">2027</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Exterior Color</label>
-          <select id="exteriorColor">
-            <option value="Any" selected>Any</option>
-            <option value="White">White</option>
-            <option value="Black">Black</option>
-            <option value="Gray">Gray</option>
-            <option value="Silver">Silver</option>
-            <option value="Blue">Blue</option>
-            <option value="Red">Red</option>
-            <option value="Green">Green</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Interior Color</label>
-          <select id="interiorColor">
-            <option value="Any" selected>Any</option>
-            <option value="Black">Black</option>
-            <option value="Gray">Gray</option>
-            <option value="Beige">Beige</option>
-            <option value="Brown">Brown</option>
-            <option value="White">White</option>
-          </select>
-        </div>
-      </div>
-
-      <h3>Lease Program</h3>
-
-      <div class="grid">
-        <div class="field">
-          <label>Manufacturer Rebate</label>
-          <select id="manufacturerRebate">
-            <option value="0">$0</option>
-            <option value="5000">$5,000</option>
-            <option value="7500">$7,500</option>
-            <option value="10000" selected>$10,000</option>
-            <option value="12700">$12,700</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Lease Cash</label>
-          <select id="leaseCash">
-            <option value="0" selected>$0</option>
-            <option value="1000">$1,000</option>
-            <option value="2000">$2,000</option>
-            <option value="3000">$3,000</option>
-            <option value="5000">$5,000</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>EV Credit</label>
-          <select id="evCredit">
-            <option value="0" selected>$0</option>
-            <option value="7500">$7,500</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Loyalty Cash</label>
-          <select id="loyaltyCash">
-            <option value="0" selected>$0</option>
-            <option value="500">$500</option>
-            <option value="1000">$1,000</option>
-            <option value="1500">$1,500</option>
-            <option value="2000">$2,000</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Residual %</label>
-          <select id="residualPercent">
-            <option value="50">50%</option>
-            <option value="52">52%</option>
-            <option value="54">54%</option>
-            <option value="56">56%</option>
-            <option value="58" selected>58%</option>
-            <option value="60">60%</option>
-            <option value="62">62%</option>
-            <option value="64">64%</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Money Factor</label>
-          <select id="moneyFactor">
-            <option value="0.00150">0.00150</option>
-            <option value="0.00180">0.00180</option>
-            <option value="0.00200">0.00200</option>
-            <option value="0.00222" selected>0.00222</option>
-            <option value="0.00250">0.00250</option>
-            <option value="0.00300">0.00300</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Term</label>
+          <label for="term">Lease Term</label>
           <select id="term">
             <option value="24">24 months</option>
             <option value="36" selected>36 months</option>
@@ -170,7 +82,7 @@
         </div>
 
         <div class="field">
-          <label>Miles</label>
+          <label for="miles">Miles Per Year</label>
           <select id="miles">
             <option value="7500">7,500</option>
             <option value="10000" selected>10,000</option>
@@ -180,43 +92,80 @@
         </div>
       </div>
 
-      <button class="search-btn" onclick="scanBackendInventory()">Scan Dealers</button>
+      <details class="advanced-box">
+        <summary>Optional filters</summary>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="exteriorColor">Exterior Color</label>
+            <select id="exteriorColor">
+              <option value="Any" selected>Any</option>
+              <option value="White">White</option>
+              <option value="Black">Black</option>
+              <option value="Gray">Gray</option>
+              <option value="Silver">Silver</option>
+              <option value="Blue">Blue</option>
+              <option value="Red">Red</option>
+              <option value="Green">Green</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="interiorColor">Interior Color</label>
+            <select id="interiorColor">
+              <option value="Any" selected>Any</option>
+              <option value="Black">Black</option>
+              <option value="Gray">Gray</option>
+              <option value="Beige">Beige</option>
+              <option value="Brown">Brown</option>
+              <option value="White">White</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="year">Year</label>
+            <select id="year">
+              <option value="2026" selected>2026</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="features">Must-have features</label>
+            <input id="features" type="text" placeholder="Example: captains chairs, AWD, pano roof" />
+          </div>
+        </div>
+      </details>
+
+      <button id="scanBtn" onclick="scanBackendInventory()">Search Deals</button>
     </section>
 
-    <section class="summary-grid">
+    <section class="summary-row">
       <div class="summary-card">
-        <span>Total Vehicles</span>
-        <strong id="totalVehicles">0</strong>
+        <span>Dealers Scanned</span>
+        <strong id="dealerCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Best Payment</span>
-        <strong id="bestPayment">$0</strong>
+        <span>Cars Found</span>
+        <strong id="vehicleCount">0</strong>
       </div>
 
       <div class="summary-card">
-        <span>Best Discount</span>
-        <strong id="bestDiscount">$0</strong>
-      </div>
-
-      <div class="summary-card">
-        <span>Avg Payment</span>
-        <strong id="avgPayment">$0</strong>
+        <span>Lease Program</span>
+        <strong id="programStatus">Not checked</strong>
       </div>
     </section>
 
-    <section class="card">
-      <div class="section-header">
-        <h2>Vehicles</h2>
-        <button onclick="clearVehicles()">Clear</button>
-      </div>
+    <section id="programBox" class="program-box hidden"></section>
 
-      <div id="vehiclesList" class="vehicles-list">
-        <p class="empty">No vehicles yet. Click Scan Dealers.</p>
-      </div>
+    <section>
+      <h2>Results</h2>
+      <div id="vehicleList" class="vehicle-list"></div>
     </section>
   </main>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
