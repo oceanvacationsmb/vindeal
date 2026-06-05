@@ -504,10 +504,12 @@ function setSelectOptions(selectId, values) {
 
 function buildResultFilters() {
   const panel = document.getElementById("resultFilters");
+  const offerPanel = document.getElementById("offerPanel");
   if (!panel) return;
 
   if (!vehicles.length) {
     panel.classList.add("hidden");
+    if (offerPanel) offerPanel.classList.add("hidden");
     return;
   }
 
@@ -516,6 +518,7 @@ function buildResultFilters() {
   setSelectOptions("exteriorFilter", vehicles.map((v) => v.exterior_color));
   setSelectOptions("interiorFilter", vehicles.map((v) => v.interior_color));
   panel.classList.remove("hidden");
+  if (offerPanel) offerPanel.classList.remove("hidden");
 }
 
 function clearResultFilters() {
@@ -682,6 +685,9 @@ async function scanBackendInventory() {
   document.getElementById("dealerCount").textContent = "0";
   document.getElementById("vehicleCount").textContent = "0";
   document.getElementById("programStatus").textContent = "Checking";
+  document.getElementById("resultFilters")?.classList.add("hidden");
+  document.getElementById("offerPanel")?.classList.add("hidden");
+  document.getElementById("dealerCoverage")?.classList.add("hidden");
   setResultsSource("");
 
   const body = {
@@ -902,10 +908,9 @@ function renderVehicleCard(v) {
           ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
           <div><span>Projected Price</span><b>${money(quote.projectedPrice)}</b></div>
           <div><span>Sales Tax Est.</span><b>${money(quote.tax)}</b></div>
-          <div><span>Tax Rule</span><b>${quote.taxRule}</b></div>
           <div class="${docFeeHigh ? "fee-bad" : ""}"><span>Doc Fee</span><b>${money(v.doc_fee || 0)}</b></div>
           <div><span>Gov Fees Est.</span><b>${money(quote.govFees)}</b></div>
-          <div><span>Dealer + Acq Fees</span><b>${money(quote.dealerFees)}</b></div>
+          <div><span>Dealer / Acq Fees</span><b>${money(quote.dealerFees)}</b></div>
           <div><span>Residual</span><b>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</b></div>
           <div><span>Residual Value</span><b>${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
           <div><span>Tier 1 MF</span><b>${v.money_factor ? v.money_factor : "Verify"}</b></div>
@@ -924,8 +929,8 @@ function renderVehicleCard(v) {
 
         <div class="formula-box">
           <b>Projected Lease Basis</b>
-          <span>MSRP - projected dealer discount - rebates + dealer fees + estimated government fees + estimated ${quote.taxRule}. Dealer advertised price is shown for reference, not used as the negotiation baseline.</span>
-          <span>${quote.taxNote}</span>
+          <span>MSRP - projected dealer discount - rebates + dealer/acquisition fees + estimated government fees + estimated sales tax. Dealer advertised price is shown for reference, not used as the negotiation baseline.</span>
+          <span>Filing, electronic registration, and dealer-specific state fees may be added or corrected by the dealer bid.</span>
         </div>
 
         ${
@@ -1025,7 +1030,13 @@ function toggleTradeIn(enabled) {
   if (!box) return;
 
   box.classList.toggle("hidden", !enabled);
-  box.open = enabled;
+  const addBtn = document.getElementById("addTradeBtn");
+  const removeBtn = document.getElementById("removeTradeBtn");
+  const status = document.getElementById("tradeStatus");
+
+  if (addBtn) addBtn.classList.toggle("hidden", enabled);
+  if (removeBtn) removeBtn.classList.toggle("hidden", !enabled);
+  if (status) status.textContent = enabled ? "Trade added" : "No trade added";
 
   if (!enabled) {
     ["tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment"].forEach((id) => {
@@ -1036,6 +1047,25 @@ function toggleTradeIn(enabled) {
     const condition = document.getElementById("tradeCondition");
     if (condition) condition.value = "";
   }
+}
+
+function validateContactInfo() {
+  const name = document.getElementById("customerName")?.value.trim();
+  const phone = document.getElementById("customerPhone")?.value.trim();
+  const email = document.getElementById("customerEmail")?.value.trim();
+  const missing = [];
+
+  if (!name) missing.push("name");
+  if (!phone) missing.push("phone");
+  if (!email) missing.push("email");
+
+  if (missing.length) {
+    alert(`Please add buyer ${missing.join(", ")} before inviting a dealer.`);
+    document.getElementById("customerName")?.focus();
+    return false;
+  }
+
+  return true;
 }
 
 function getTradeData() {
@@ -1116,6 +1146,7 @@ async function sendBidRequest(vin) {
   const v = vehicles.find((x) => x.vin === vin);
 
   if (!v) return;
+  if (!validateContactInfo()) return;
 
   try {
     await saveBidPayload(buildBidPayload(v));
@@ -1126,6 +1157,8 @@ async function sendBidRequest(vin) {
 }
 
 async function sendSelectedBidRequests() {
+  if (!validateContactInfo()) return;
+
   const selectedVehicles = vehicles.filter((v) => selectedVins.has(v.vin));
 
   if (!selectedVehicles.length) {

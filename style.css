@@ -32,6 +32,7 @@ body {
 }
 
 .search-panel,
+.side-card,
 .program-box,
 .summary-card,
 .dealer-box,
@@ -39,7 +40,8 @@ body {
 .empty-box,
 .program-preview,
 .dealer-coverage,
-.result-filters {
+.result-filters,
+.offer-panel {
   background: white;
   border-radius: 18px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
@@ -48,6 +50,24 @@ body {
 .search-panel {
   padding: 24px;
   margin-bottom: 18px;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.side-card {
+  padding: 18px;
 }
 
 .section-head h2 {
@@ -63,6 +83,17 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(180px, 1fr));
   gap: 14px;
+}
+
+.field-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .field label {
@@ -85,13 +116,34 @@ body {
 }
 
 .filter-box,
-.trade-box,
 .contact-box {
   margin-top: 18px;
   padding: 16px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   background: #f8fafc;
+}
+
+.trade-box {
+  margin-top: 14px;
+}
+
+.trade-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.trade-head h2,
+.trade-head p {
+  margin: 0;
+}
+
+.trade-head p {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .filter-title {
@@ -153,7 +205,6 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 18px;
 }
 
 .rebate-grid {
@@ -212,7 +263,7 @@ body {
 
 #scanBtn {
   width: 100%;
-  margin-top: 18px;
+  margin-top: 14px;
   height: 50px;
   border: none;
   border-radius: 12px;
@@ -287,9 +338,22 @@ body {
 }
 
 .dealer-coverage,
-.result-filters {
+.result-filters,
+.offer-panel {
   padding: 18px;
   margin-bottom: 18px;
+}
+
+.results-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.results-head > .small-note {
+  grid-column: 1 / -1;
 }
 
 .dealer-chip-grid {
@@ -537,6 +601,14 @@ body {
   align-items: center;
 }
 
+.offer-panel .program-preview {
+  background: transparent;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 14px 0 0;
+}
+
 .down-box input[type="number"] {
   height: 38px;
   border: 1px solid #cbd5e1;
@@ -667,6 +739,15 @@ body {
 }
 
 @media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .vehicle-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -685,10 +766,24 @@ body {
 }
 
 @media (max-width: 700px) {
+  .container {
+    padding: 14px;
+  }
+
+  .sidebar {
+    grid-template-columns: 1fr;
+  }
+
   .vehicle-grid,
   .form-grid,
   .summary-row,
-  .filter-grid {
+  .filter-grid,
+  .mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .results-head,
+  .trade-head {
     grid-template-columns: 1fr;
   }
 }
