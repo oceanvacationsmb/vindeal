@@ -537,6 +537,21 @@ body {
   border: 1px solid #e2e8f0;
 }
 
+.lease-scenario b,
+.lease-scenario span {
+  display: block;
+}
+
+.lease-scenario b {
+  margin-bottom: 5px;
+}
+
+.lease-scenario span {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .program-note {
   display: block;
   margin-top: 10px;

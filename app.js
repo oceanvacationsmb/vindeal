@@ -145,7 +145,7 @@ function getTradeEquity() {
 }
 
 function calculateTargetDiscount(v, targetPayment) {
-  const quote = calculateLeaseQuote(v, getCardLeaseSelection(v.vin));
+  const quote = calculateLeaseQuote(v);
   const target = Math.min(number(targetPayment), number(quote.monthlyPayment));
   const residual = quote.residualValue;
   const term = quote.term || 36;
@@ -394,25 +394,46 @@ function normalizeStickerUrl(v) {
   return "";
 }
 
-function getCardLeaseSelection(vin) {
-  return {
-    term: Number(document.getElementById(`term_${vin}`)?.value || document.getElementById("term")?.value || 36),
-    miles: Number(document.getElementById(`miles_${vin}`)?.value || document.getElementById("miles")?.value || 10000),
-  };
+function leaseProgramMatchesVehicle(program, v) {
+  return (
+    sameText(program.brand, v.brand) &&
+    sameText(program.model, v.model) &&
+    Number(program.year) === Number(v.year) &&
+    (sameText(program.trim, v.trim) || sameText(program.trim, "Any"))
+  );
 }
 
 function findLeaseProgram(v, term, miles) {
-  return (
-    leaseProgramsCatalog.find(
-      (program) =>
-        sameText(program.brand, v.brand) &&
-        sameText(program.model, v.model) &&
-        Number(program.year) === Number(v.year) &&
-        Number(program.term) === Number(term) &&
-        Number(program.miles) === Number(miles) &&
-        (sameText(program.trim, v.trim) || sameText(program.trim, "Any"))
-    ) || null
-  );
+  return leaseProgramsCatalog.find((program) => leaseProgramMatchesVehicle(program, v) && Number(program.term) === Number(term) && Number(program.miles) === Number(miles)) || null;
+}
+
+function getBaseLeaseProgram(v) {
+  const vehicleTerm = number(v.term);
+  const vehicleMiles = number(v.miles);
+
+  if (vehicleTerm && vehicleMiles) {
+    return {
+      term: vehicleTerm,
+      miles: vehicleMiles,
+      program: findLeaseProgram(v, vehicleTerm, vehicleMiles),
+    };
+  }
+
+  const program =
+    leaseProgramsCatalog
+      .filter((candidate) => leaseProgramMatchesVehicle(candidate, v))
+      .sort((a, b) => {
+        if (programIsVerified(a) !== programIsVerified(b)) return programIsVerified(a) ? -1 : 1;
+        if (sameText(a.trim, v.trim) !== sameText(b.trim, v.trim)) return sameText(a.trim, v.trim) ? -1 : 1;
+        if (Number(a.term) !== Number(b.term)) return Math.abs(Number(a.term) - 36) - Math.abs(Number(b.term) - 36);
+        return Math.abs(Number(a.miles) - 10000) - Math.abs(Number(b.miles) - 10000);
+      })[0] || null;
+
+  return {
+    term: vehicleTerm || number(program?.term) || 36,
+    miles: vehicleMiles || number(program?.miles) || 10000,
+    program,
+  };
 }
 
 function programIsVerified(program) {
@@ -421,9 +442,10 @@ function programIsVerified(program) {
 
 function calculateLeaseQuote(v, options = {}) {
   const msrp = number(v.msrp);
-  const term = number(options.term || v.term || document.getElementById("term")?.value || 36);
-  const miles = number(options.miles || v.miles || document.getElementById("miles")?.value || 10000);
-  const program = findLeaseProgram(v, term, miles);
+  const baseProgram = getBaseLeaseProgram(v);
+  const term = number(options.term || baseProgram.term);
+  const miles = number(options.miles || baseProgram.miles);
+  const program = options.term || options.miles ? findLeaseProgram(v, term, miles) : baseProgram.program || findLeaseProgram(v, term, miles);
   const verifiedProgram = programIsVerified(program);
   const incentive = number(verifiedProgram && program.manufacturer_rebate ? program.manufacturer_rebate : v.manufacturer_rebate);
   const dealerDocFee = number(v.doc_fee);
@@ -463,7 +485,7 @@ function calculateLeaseQuote(v, options = {}) {
       ? verifiedProgram
         ? "Verified manufacturer program"
         : "Program found, not verified"
-      : "No program loaded for this term/miles",
+      : "No base program loaded for this vehicle",
   };
 }
 
@@ -1192,25 +1214,14 @@ function renderVehicleCard(v) {
           <div><span>Residual</span><b>${quote.residualPercent ? `${quote.residualPercent}%` : "Verify"}</b></div>
           <div><span>Residual Value</span><b id="residual_value_${v.vin}">${quote.residualValue ? money(quote.residualValue) : "Verify"}</b></div>
           <div><span>Tier 1 MF</span><b id="mf_${v.vin}">${quote.monthlyPayment ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify"}</b></div>
+          <div><span>Base Program</span><b>${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi</b></div>
           <div><span>Estimated Monthly</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
           <div><span>Total Payments</span><b id="total_pay_${v.vin}">${basePayment ? money(basePayment * quote.term) : "Verify"}</b></div>
         </div>
 
         <div class="lease-scenario">
-          <div class="mini-grid">
-            <div class="field">
-              <label>Term</label>
-              <select id="term_${v.vin}" onchange="updateLeaseScenario('${v.vin}')">
-                ${[24, 36, 39, 42, 48].map((term) => `<option value="${term}" ${Number(quote.term) === term ? "selected" : ""}>${term} mo</option>`).join("")}
-              </select>
-            </div>
-            <div class="field">
-              <label>Miles</label>
-              <select id="miles_${v.vin}" onchange="updateLeaseScenario('${v.vin}')">
-                ${[10000, 12000, 15000].map((miles) => `<option value="${miles}" ${Number(quote.miles) === miles ? "selected" : ""}>${(miles / 1000).toFixed(0)}k</option>`).join("")}
-              </select>
-            </div>
-          </div>
+          <b>Basic Lease Program</b>
+          <span>${quote.term} months / ${Number(quote.miles || 0).toLocaleString()} miles per year. This is the public estimate basis for the card.</span>
           <span id="program_status_${v.vin}" class="program-note ${quote.programVerified ? "good" : "warn"}">${quote.programStatus}</span>
         </div>
 
@@ -1276,7 +1287,7 @@ function updateTargetPayment(vin) {
   const v = vehicles.find((x) => x.vin === vin);
   if (!v) return null;
 
-  const quote = calculateLeaseQuote(v, getCardLeaseSelection(vin));
+  const quote = calculateLeaseQuote(v);
   const targetInput = document.getElementById(`target_${vin}`);
   const maxTarget = Math.floor(quote.monthlyPayment || 0);
   let target = Number(targetInput?.value || 0);
@@ -1318,30 +1329,6 @@ function updateTargetPayment(vin) {
     trade_equity_applied: result.tradeEquity,
     cap_cost_after_trade_before_discount: result.currentCapCost,
   };
-}
-
-function updateLeaseScenario(vin) {
-  const v = vehicles.find((x) => x.vin === vin);
-  if (!v) return;
-
-  const quote = calculateLeaseQuote(v, getCardLeaseSelection(vin));
-  const payment = document.getElementById(`pay_${vin}`);
-  const total = document.getElementById(`total_pay_${vin}`);
-  const residual = document.getElementById(`residual_value_${vin}`);
-  const mf = document.getElementById(`mf_${vin}`);
-  const status = document.getElementById(`program_status_${vin}`);
-
-  if (payment) payment.textContent = quote.monthlyPayment ? `${money(quote.monthlyPayment)}/mo` : "Verify";
-  if (total) total.textContent = quote.monthlyPayment ? money(quote.totalPayments) : "Verify";
-  if (residual) residual.textContent = quote.residualValue ? money(quote.residualValue) : "Verify";
-  if (mf) mf.textContent = quote.program?.money_factor || v.money_factor ? `${quote.program?.money_factor || v.money_factor} (${moneyFactorApr(quote.program?.money_factor || v.money_factor)})` : "Verify";
-  if (status) {
-    status.textContent = quote.programStatus;
-    status.className = `program-note ${quote.programVerified ? "good" : "warn"}`;
-  }
-
-  updateTargetPayment(vin);
-  renderComparePanel();
 }
 
 function renderComparePanel() {
