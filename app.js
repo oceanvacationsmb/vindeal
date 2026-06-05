@@ -113,6 +113,58 @@ function moneyFactorApr(value) {
   return number(value) ? `${(number(value) * 2400).toFixed(2)}% APR equiv.` : "Verify";
 }
 
+function getTradeEquity() {
+  const trade = getTradeData();
+  if (!trade) return 0;
+  return Math.max(0, number(trade.kbb_expected_value) - number(trade.payoff_amount));
+}
+
+function calculateTargetDiscount(v, targetPayment) {
+  const quote = calculateLeaseQuote(v);
+  const target = number(targetPayment);
+  const residual = quote.residualValue;
+  const term = quote.term || 36;
+  const mf = number(v.money_factor);
+  const tradeEquity = getTradeEquity();
+  const currentCapCost = Math.max(0, quote.publicCapCost - tradeEquity);
+
+  if (!target || !term || !residual || !mf) {
+    return {
+      tradeEquity,
+      currentCapCost,
+      requiredDiscount: 0,
+      discountPercent: 0,
+      risk: "unknown",
+      label: "Enter target payment",
+    };
+  }
+
+  const denominator = 1 / term + mf;
+  const neededCapCost = (target + residual / term - residual * mf) / denominator;
+  const requiredDiscount = Math.max(0, currentCapCost - neededCapCost);
+  const discountPercent = quote.msrp ? requiredDiscount / quote.msrp : 0;
+  let risk = "green";
+  let label = "Likely realistic";
+
+  if (discountPercent >= 0.12) {
+    risk = "red";
+    label = "High risk to be denied";
+  } else if (discountPercent >= 0.07) {
+    risk = "orange";
+    label = "Aggressive ask";
+  }
+
+  return {
+    tradeEquity,
+    currentCapCost,
+    neededCapCost,
+    requiredDiscount,
+    discountPercent,
+    risk,
+    label,
+  };
+}
+
 function authHeaders(extra = {}) {
   return {
     apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -233,7 +285,9 @@ function calculateLeaseQuote(v) {
   const dealerDocFee = number(v.doc_fee);
   const bankAcquisitionFee = number(v.acquisition_fee);
   const dealerAddons = number(v.dealer_addons_amount || v.junk_fee);
-  const publicCapCost = Math.max(0, msrp - incentive + bankAcquisitionFee);
+  const fairMarketPrice = number(v.sale_price || v.advertised_price || msrp);
+  const financeAmount = Math.max(0, fairMarketPrice - incentive + bankAcquisitionFee);
+  const publicCapCost = financeAmount;
   const residualPercent = number(v.residual_percent);
   const residualValue = msrp * (residualPercent / 100);
   const term = number(v.term || document.getElementById("term")?.value || 36);
@@ -248,6 +302,8 @@ function calculateLeaseQuote(v) {
     dealerDocFee,
     bankAcquisitionFee,
     dealerAddons,
+    fairMarketPrice,
+    financeAmount,
     publicCapCost,
     residualPercent,
     residualValue,
@@ -903,6 +959,8 @@ function renderVehicleCard(v) {
   const isSelected = selectedVins.has(v.vin);
   const showInvoice = v.invoice_verified && Number(v.invoice_price || 0) > 0;
   const stickerUrl = normalizeStickerUrl(v);
+  const targetInputId = `target_${v.vin}`;
+  const targetResult = calculateTargetDiscount(v, 0);
 
   return `
     <div class="vehicle-card ${isSelected ? "selected-card" : ""}" draggable="true" data-vin="${v.vin}">
@@ -938,6 +996,8 @@ function renderVehicleCard(v) {
         <div class="price-box">
           <div><span>MSRP</span><b>${money(v.msrp)}</b></div>
           <div><span>Dealer Website Price</span><b>${money(v.sale_price)}</b></div>
+          <div><span>Fair Market Price</span><b>${money(quote.fairMarketPrice)}</b></div>
+          <div><span>Finance Amount Est.</span><b>${money(quote.financeAmount)}</b></div>
           <div><span>Manufacturer Incentive</span><b>${quote.incentive ? money(quote.incentive) : "None found"}</b></div>
           ${showInvoice ? `<div><span>Invoice</span><b>${money(v.invoice_price)}</b></div>` : ""}
           ${showInvoice ? `<div><span>Over Invoice</span><b>${money(v.profit_over_invoice)}</b></div>` : ""}
@@ -950,9 +1010,21 @@ function renderVehicleCard(v) {
           <div><span>Public Base Estimate</span><b id="pay_${v.vin}">${basePayment ? money(basePayment) + "/mo" : "Verify"}</b></div>
         </div>
 
+        <div class="target-box">
+          <label>Target Monthly Payment</label>
+          <div class="target-row">
+            <input id="${targetInputId}" type="number" min="0" step="25" placeholder="Example 599" oninput="updateTargetPayment('${v.vin}')" />
+            <button type="button" onclick="updateTargetPayment('${v.vin}')">Calculate</button>
+          </div>
+          <div id="target_result_${v.vin}" class="target-result risk-${targetResult.risk}">
+            <b>${targetResult.label}</b>
+            <span>Enter the buyer's target payment to estimate the dealer discount needed.</span>
+          </div>
+        </div>
+
         <div class="formula-box">
           <b>Estimate Disclaimer</b>
-          <span>Public base estimate uses available MSRP, manufacturer incentive, residual, money factor, and bank acquisition fee when known.</span>
+          <span>Finance amount estimate: fair market / dealer website price - manufacturer incentive + bank acquisition fee. Payment is calculated from residual value and money factor.</span>
           <span>Before additional dealer discount, taxes, registration/government fees, dealer add-ons, and final dealer documents. Final numbers must be checked with the dealer before signing.</span>
         </div>
 
@@ -992,6 +1064,39 @@ function renderVehicleCard(v) {
       </div>
     </div>
   `;
+}
+
+function updateTargetPayment(vin) {
+  const v = vehicles.find((x) => x.vin === vin);
+  if (!v) return null;
+
+  const target = Number(document.getElementById(`target_${vin}`)?.value || 0);
+  const result = calculateTargetDiscount(v, target);
+  const box = document.getElementById(`target_result_${vin}`);
+
+  if (box) {
+    box.className = `target-result risk-${result.risk}`;
+    box.innerHTML = target
+      ? `
+        <b>${result.label}</b>
+        <span>Dealer needs about ${money(result.requiredDiscount)} additional discount to reach ${money(target)}/mo.</span>
+        <span>${(result.discountPercent * 100).toFixed(1)}% of MSRP. Trade equity applied: ${money(result.tradeEquity)}.</span>
+      `
+      : `
+        <b>${result.label}</b>
+        <span>Enter the buyer's target payment to estimate the dealer discount needed.</span>
+      `;
+  }
+
+  return {
+    target_monthly_payment: target,
+    required_dealer_discount: result.requiredDiscount,
+    required_discount_percent: result.discountPercent,
+    target_risk: result.risk,
+    target_label: result.label,
+    trade_equity_applied: result.tradeEquity,
+    cap_cost_after_trade_before_discount: result.currentCapCost,
+  };
 }
 
 function recalculatePayment(vin) {
@@ -1057,6 +1162,15 @@ function toggleTradeIn(enabled) {
   }
 }
 
+function openProfileModal() {
+  document.getElementById("profileModal")?.classList.remove("hidden");
+  document.getElementById("customerFirstName")?.focus();
+}
+
+function closeProfileModal() {
+  document.getElementById("profileModal")?.classList.add("hidden");
+}
+
 function validateContactInfo() {
   const firstName = document.getElementById("customerFirstName")?.value.trim();
   const lastName = document.getElementById("customerLastName")?.value.trim();
@@ -1071,7 +1185,7 @@ function validateContactInfo() {
 
   if (missing.length) {
     alert(`Please add buyer ${missing.join(", ")} before inviting a dealer.`);
-    document.getElementById("customerFirstName")?.focus();
+    openProfileModal();
     return false;
   }
 
@@ -1105,6 +1219,7 @@ function buildBidPayload(v) {
   const tradeIn = getTradeData();
   const firstName = document.getElementById("customerFirstName").value.trim();
   const lastName = document.getElementById("customerLastName").value.trim();
+  const targetDetails = updateTargetPayment(v.vin);
 
   return {
     customer_name: `${firstName} ${lastName}`.trim(),
@@ -1136,6 +1251,7 @@ function buildBidPayload(v) {
       listing_url: v.listing_url,
       favorite: favoriteVins.has(v.vin),
       trade_in: tradeIn,
+      target_payment: targetDetails,
     },
 
     selected_vins: [v.vin],
@@ -1247,6 +1363,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setSearchUiState("idle");
   } catch (error) {
     setConnectionStatus("error", "Error");
-    document.getElementById("vehicleList").innerHTML = `<div class="empty-box">Connection failed: ${error.message}</div>`;
+    setSearchUiState("idle");
+    setResultsSource(`Connection failed: ${error.message}`);
   }
 });

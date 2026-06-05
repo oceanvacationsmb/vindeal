@@ -20,72 +20,6 @@
         <section class="side-card">
           <div class="section-head">
             <div>
-              <h2>Buyer Profile</h2>
-              <p>Required before inviting dealers.</p>
-            </div>
-          </div>
-
-          <div class="field-stack">
-            <div class="mini-grid">
-              <div class="field">
-                <label>First Name</label>
-                <input id="customerFirstName" type="text" placeholder="First" />
-              </div>
-
-              <div class="field">
-                <label>Last Name</label>
-                <input id="customerLastName" type="text" placeholder="Last" />
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Phone</label>
-              <input id="customerPhone" type="text" placeholder="Phone" />
-            </div>
-
-            <div class="field">
-              <label>Email</label>
-              <input id="customerEmail" type="email" placeholder="Email" />
-            </div>
-
-            <div class="field">
-              <label>Credit Range</label>
-              <select id="creditScoreRange">
-                <option value="760+" selected>760+</option>
-                <option value="720-759">720-759</option>
-                <option value="680-719">680-719</option>
-                <option value="640-679">640-679</option>
-                <option value="600-639">600-639</option>
-                <option value="below 600">Below 600</option>
-              </select>
-            </div>
-
-            <div class="mini-grid">
-              <div class="field">
-                <label>Term</label>
-                <select id="term" onchange="loadProgramsForSelectedCar()">
-                  <option value="24">24 mo</option>
-                  <option value="36" selected>36 mo</option>
-                  <option value="39">39 mo</option>
-                  <option value="48">48 mo</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label>Miles</label>
-                <select id="miles" onchange="loadProgramsForSelectedCar()">
-                  <option value="10000" selected>10k</option>
-                  <option value="12000">12k</option>
-                  <option value="15000">15k</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="side-card">
-          <div class="section-head">
-            <div>
               <h2>Find Cars</h2>
               <p>Start with the basics. Filters appear after results load.</p>
             </div>
@@ -150,7 +84,18 @@
             </div>
           </div>
 
-          <button id="scanBtn" onclick="scanBackendInventory()">Search Lease Deals</button>
+          <button id="scanBtn" onclick="scanBackendInventory()">Find My Car</button>
+        </section>
+
+        <section class="side-card">
+          <div class="section-head">
+            <div>
+              <h2>Buyer Profile</h2>
+              <p>Optional now. Required only when inviting dealers.</p>
+            </div>
+          </div>
+
+          <button type="button" class="secondary-btn full-btn" onclick="openProfileModal()">Complete Profile</button>
         </section>
 
         <section class="side-card">
@@ -296,6 +241,73 @@
     </div>
   </main>
 
-  <script src="app.js?v=76"></script>
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2>Complete Buyer Profile</h2>
+          <p>This info goes to the dealer only when you invite them to bid.</p>
+        </div>
+        <button type="button" class="ghost-btn" onclick="closeProfileModal()">Close</button>
+      </div>
+
+      <div class="form-grid contact-grid">
+        <div class="field">
+          <label>First Name</label>
+          <input id="customerFirstName" type="text" placeholder="First" />
+        </div>
+
+        <div class="field">
+          <label>Last Name</label>
+          <input id="customerLastName" type="text" placeholder="Last" />
+        </div>
+
+        <div class="field">
+          <label>Phone</label>
+          <input id="customerPhone" type="text" placeholder="Phone" />
+        </div>
+
+        <div class="field">
+          <label>Email</label>
+          <input id="customerEmail" type="email" placeholder="Email" />
+        </div>
+
+        <div class="field">
+          <label>Credit Range</label>
+          <select id="creditScoreRange">
+            <option value="760+" selected>760+</option>
+            <option value="720-759">720-759</option>
+            <option value="680-719">680-719</option>
+            <option value="640-679">640-679</option>
+            <option value="600-639">600-639</option>
+            <option value="below 600">Below 600</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Lease Term</label>
+          <select id="term" onchange="loadProgramsForSelectedCar()">
+            <option value="24">24 mo</option>
+            <option value="36" selected>36 mo</option>
+            <option value="39">39 mo</option>
+            <option value="48">48 mo</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Miles Per Year</label>
+          <select id="miles" onchange="loadProgramsForSelectedCar()">
+            <option value="10000" selected>10k</option>
+            <option value="12000">12k</option>
+            <option value="15000">15k</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="button" class="secondary-btn full-btn" onclick="closeProfileModal()">Save Profile</button>
+    </div>
+  </div>
+
+  <script src="app.js?v=77"></script>
 </body>
 </html>

@@ -198,6 +198,10 @@ body {
   color: white;
 }
 
+.full-btn {
+  width: 100%;
+}
+
 .ghost-btn {
   background: #e2e8f0;
   color: #0f172a;
@@ -482,6 +486,79 @@ body {
 .filter-chip input {
   width: 15px;
   height: 15px;
+}
+
+.target-box {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.target-box label {
+  display: block;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.target-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.target-row input {
+  height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+.target-row button {
+  border: none;
+  border-radius: 10px;
+  background: #111827;
+  color: white;
+  padding: 0 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.target-result {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+}
+
+.target-result b,
+.target-result span {
+  display: block;
+}
+
+.target-result span {
+  margin-top: 5px;
+}
+
+.risk-green {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.risk-orange {
+  background: #ffedd5;
+  color: #7c2d12;
+}
+
+.risk-red {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+
+.risk-unknown {
+  background: #eef2ff;
+  color: #3730a3;
 }
 
 .dealer-results {
@@ -849,6 +926,48 @@ body {
   .filter-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: white;
+  border-radius: 18px;
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.22);
+  padding: 22px;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.modal-head h2,
+.modal-head p {
+  margin: 0;
+}
+
+.modal-head p {
+  color: #64748b;
+  margin-top: 5px;
 }
 
 @media (max-width: 700px) {
