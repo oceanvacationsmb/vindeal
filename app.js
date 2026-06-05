@@ -29,7 +29,7 @@ const vehicleData = {
   },
   Toyota: {
     "Grand Highlander": ["Any", "XLE", "Limited", "Platinum"],
-    "bZ4X": ["Any", "XLE", "Limited"],
+    bZ4X: ["Any", "XLE", "Limited"],
     Highlander: ["Any", "LE", "XLE", "Limited", "Platinum"]
   },
   Honda: {
@@ -133,11 +133,13 @@ function searchNearby() {
     `${search.year} ${search.brand} ${search.model} ${search.trim === "Any" ? "" : search.trim} lease ${search.zipCode}`
   );
 
+  const modelSlug = search.model.toLowerCase().replaceAll(" ", "_");
+
   const links = [
     `https://www.google.com/search?q=${query}`,
-    `https://www.cars.com/shopping/results/?stock_type=new&makes%5B%5D=${search.brand.toLowerCase()}&models%5B%5D=${search.brand.toLowerCase()}-${search.model.toLowerCase().replaceAll(" ", "_")}&zip=${search.zipCode}&maximum_distance=${search.radius}`,
+    `https://www.cars.com/shopping/results/?stock_type=new&makes%5B%5D=${search.brand.toLowerCase()}&models%5B%5D=${search.brand.toLowerCase()}-${modelSlug}&zip=${search.zipCode}&maximum_distance=${search.radius}`,
     `https://www.autotrader.com/cars-for-sale/new-cars/${search.brand}/${search.model}/${search.zipCode}?searchRadius=${search.radius}`,
-    `https://www.cargurus.com/Cars/new/searchresults.action?zip=${search.zipCode}&distance=${search.radius}&entitySelectingHelper.selectedEntity=d`
+    `https://www.cargurus.com/Cars/new/searchresults.action?zip=${search.zipCode}&distance=${search.radius}`
   ];
 
   links.forEach(link => window.open(link, "_blank"));
@@ -158,6 +160,104 @@ function openManufacturerOffers() {
   };
 
   window.open(links[brand] || "https://www.google.com/search?q=manufacturer+lease+offers", "_blank");
+}
+
+async function decodeVin() {
+  const vin = getValue("vin");
+
+  if (!vin || vin.length < 10) {
+    alert("Paste a valid VIN first.");
+    return;
+  }
+
+  try {
+    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${vin}?format=json`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!data.Results || !data.Results[0]) {
+      alert("VIN not found.");
+      return;
+    }
+
+    const result = data.Results[0];
+
+    const make = result.Make || "";
+    const model = result.Model || "";
+    const year = result.ModelYear || "";
+    const trim = result.Trim || "";
+    const bodyClass = result.BodyClass || "";
+    const driveType = result.DriveType || "";
+
+    if (make) {
+      const brandSelect = document.getElementById("brand");
+
+      const matchBrand = Array.from(brandSelect.options).find(option =>
+        option.value.toLowerCase() === make.toLowerCase()
+      );
+
+      if (matchBrand) {
+        brandSelect.value = matchBrand.value;
+        updateModels();
+      }
+    }
+
+    if (model) {
+      const modelSelect = document.getElementById("model");
+
+      const matchModel = Array.from(modelSelect.options).find(option =>
+        option.value.toLowerCase() === model.toLowerCase()
+      );
+
+      if (matchModel) {
+        modelSelect.value = matchModel.value;
+        updateTrims();
+      }
+    }
+
+    if (year) {
+      const yearSelect = document.getElementById("year");
+      const matchYear = Array.from(yearSelect.options).find(option => option.value === year);
+
+      if (matchYear) {
+        yearSelect.value = year;
+      }
+    }
+
+    if (trim) {
+      const trimSelect = document.getElementById("trim");
+
+      const matchTrim = Array.from(trimSelect.options).find(option =>
+        trim.toLowerCase().includes(option.value.toLowerCase()) ||
+        option.value.toLowerCase().includes(trim.toLowerCase())
+      );
+
+      if (matchTrim) {
+        trimSelect.value = matchTrim.value;
+      }
+    }
+
+    const nameParts = [year, make, model, trim].filter(Boolean);
+    document.getElementById("vehicleName").value = nameParts.join(" ");
+
+    let noteText = document.getElementById("notes").value;
+
+    noteText += `\nVIN decoded:
+Make: ${make}
+Model: ${model}
+Year: ${year}
+Trim: ${trim}
+Body: ${bodyClass}
+Drive: ${driveType}`;
+
+    document.getElementById("notes").value = noteText.trim();
+
+    alert("VIN decoded.");
+  } catch (error) {
+    console.error(error);
+    alert("VIN decode failed.");
+  }
 }
 
 function totalRebates(vehicle) {
@@ -524,8 +624,7 @@ function renderVehicles() {
 
             <p>
               <strong>Search:</strong> ${vehicle.zipCode || "-"} within ${vehicle.radius || "-"} miles |
-              <strong>Color:</strong> ${vehicle.exteriorColor || "Any"} /
-              ${vehicle.interiorColor || "Any"}
+              <strong>Color:</strong> ${vehicle.exteriorColor || "Any"} / ${vehicle.interiorColor || "Any"}
             </p>
 
             <div class="badges">
