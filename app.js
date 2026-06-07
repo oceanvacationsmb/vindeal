@@ -21,6 +21,8 @@ let activeResultFilters = {
   interior: new Set(),
 };
 
+const ALLOWED_SEARCH_RADII = [50, 100, 250, 500, 1000];
+
 const ZIP_COORDS = {
   "29577": { city: "Myrtle Beach", state: "SC", latitude: 33.6891, longitude: -78.8867 },
 };
@@ -116,6 +118,11 @@ function unique(list) {
 
 function number(value) {
   return Number(value || 0);
+}
+
+function selectedRadius() {
+  const requested = Number(document.getElementById("radius")?.value || 250);
+  return ALLOWED_SEARCH_RADII.includes(requested) ? requested : 250;
 }
 
 function percent(value) {
@@ -331,7 +338,7 @@ function getDealerDistance(dealer) {
 }
 
 function getDealersInRadius(body) {
-  const radius = Number(body?.radius || document.getElementById("radius")?.value || 0);
+  const radius = Number(body?.radius || selectedRadius());
   const brand = body?.brand || document.getElementById("brand")?.value || "";
 
   return dealersCatalog
@@ -1084,7 +1091,7 @@ async function scanBackendInventory() {
 
   const body = {
     zipCode: document.getElementById("zipCode").value.trim(),
-    radius: Number(document.getElementById("radius").value),
+    radius: selectedRadius(),
     registrationState: document.getElementById("registrationState").value,
 
     dealType: "lease",
