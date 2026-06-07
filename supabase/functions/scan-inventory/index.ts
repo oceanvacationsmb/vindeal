@@ -52,7 +52,7 @@ const corsHeaders = {
 
 const USER_AGENT = "VINDealBot/0.1 (+https://oceanvacationsmb.github.io/vindeal/; public inventory transparency)";
 const MAX_DEALERS_TO_SCAN = 12;
-const MAX_PAGES_PER_DEALER = 4;
+const MAX_PAGES_PER_DEALER = 10;
 const MAX_HTML_CHARS = 900_000;
 
 Deno.serve(async (request) => {
@@ -382,9 +382,13 @@ async function scanDealerInventory(
       continue;
     }
 
-    const html = await fetchHtml(candidate);
-    const extracted = extractVehiclesFromHtml(html, candidate, dealer, criteria);
-    vehicles.push(...extracted);
+    try {
+      const html = await fetchHtml(candidate);
+      const extracted = extractVehiclesFromHtml(html, candidate, dealer, criteria);
+      vehicles.push(...extracted);
+    } catch (error) {
+      console.warn(`${dealer.name} candidate skipped ${candidate}: ${errorMessage(error)}`);
+    }
 
     if (vehicles.length >= 20) break;
   }
@@ -400,19 +404,22 @@ async function discoverInventoryPages(
   const modelSlug = criteria.model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const brandSlug = criteria.brand.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const fixed = [
+    "/new-inventory/",
     "/new-inventory/index.htm",
     "/new-inventory.htm",
     "/searchnew.aspx",
     "/new-vehicles/",
+    "/new/",
     "/inventory/new/",
     `/new-${brandSlug}/`,
+    `/new-${brandSlug}-inventory/`,
     `/new/${brandSlug}/`,
     `/new/${brandSlug}/${modelSlug}/`,
     `/inventory/new/${brandSlug}/${modelSlug}/`,
     `/all-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}`,
-  ].map((path) => new URL(path, origin).toString());
+  ];
 
-  const found = new Set<string>([...fixed]);
+  const found = new Set<string>();
 
   if (await isAllowedByRobots(website)) {
     const homepage = await fetchHtml(website).catch(() => "");
@@ -423,6 +430,8 @@ async function discoverInventoryPages(
 
     links.forEach((url) => found.add(url));
   }
+
+  fixed.map((path) => new URL(path, origin).toString()).forEach((url) => found.add(url));
 
   return [...found];
 }
