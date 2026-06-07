@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-strict-model-v3";
+const SCANNER_VERSION = "2026-06-07-sitemap-vin-v4";
 
 type Dealer = {
   name: string;
@@ -58,6 +58,8 @@ const USER_AGENT = "VINDealBot/0.1 (+https://oceanvacationsmb.github.io/vindeal/
 const MAX_DEALERS_TO_SCAN = 12;
 const MAX_PAGES_PER_DEALER = 10;
 const MAX_HTML_CHARS = 900_000;
+const MAX_SITEMAP_VEHICLES_PER_DEALER = 60;
+const MAX_DETAIL_PAGES_PER_DEALER = 25;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -381,6 +383,9 @@ async function scanDealerInventory(
   if (!website) return [];
 
   const origin = new URL(website).origin;
+  const sitemapVehicles = await scanDealerSitemapInventory(origin, dealer, criteria);
+  if (sitemapVehicles.length) return sitemapVehicles;
+
   const candidates = await discoverInventoryPages(origin, website, criteria);
   const vehicles: Vehicle[] = [];
 
@@ -401,6 +406,126 @@ async function scanDealerInventory(
   }
 
   return uniqueVehiclesByVin(vehicles);
+}
+
+async function scanDealerSitemapInventory(
+  origin: string,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const sitemapUrl = new URL("/sitemap.xml", origin).toString();
+  if (!(await isAllowedByRobots(sitemapUrl))) return [];
+
+  const xml = await fetchHtml(sitemapUrl).catch(() => "");
+  if (!xml) return [];
+
+  const locs = [...xml.matchAll(/<loc>([\s\S]*?)<\/loc>/gi)]
+    .map((match) => decodeHtmlEntities(match[1]).trim())
+    .map((url) => safeUrl(url, origin))
+    .filter(Boolean);
+
+  const vehicles = locs
+    .map((url) => vehicleFromDetailUrl(url, dealer, criteria))
+    .filter(Boolean)
+    .slice(0, MAX_SITEMAP_VEHICLES_PER_DEALER) as Vehicle[];
+
+  const enriched: Vehicle[] = [];
+  for (const vehicle of vehicles.slice(0, MAX_DETAIL_PAGES_PER_DEALER)) {
+    enriched.push(await enrichVehicleFromDetailPage(vehicle, dealer, criteria));
+  }
+
+  return uniqueVehiclesByVin([...enriched, ...vehicles.slice(MAX_DETAIL_PAGES_PER_DEALER)]);
+}
+
+async function enrichVehicleFromDetailPage(
+  vehicle: Vehicle,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const detailUrl = vehicle.listing_url || "";
+  if (!detailUrl || !(await isAllowedByRobots(detailUrl))) return vehicle;
+
+  try {
+    const html = await fetchHtml(detailUrl);
+    const extracted = extractVehiclesFromHtml(html, detailUrl, dealer, criteria).find((item) => item.vin === vehicle.vin);
+    const text = stripHtml(html);
+
+    return {
+      ...vehicle,
+      ...(extracted || {}),
+      vin: vehicle.vin,
+      listing_url: detailUrl,
+      trim: extracted?.trim && extracted.trim !== "Verify" ? extracted.trim : vehicle.trim,
+      msrp: extracted?.msrp || vehicle.msrp || guessPrice(text, ["MSRP", "Retail Price", "Sticker"]),
+      sale_price: extracted?.sale_price || vehicle.sale_price || guessPrice(text, ["Sale Price", "Internet Price", "Dealer Price", "Price"]),
+      exterior_color: extracted?.exterior_color || vehicle.exterior_color || guessColor(text, ["Exterior Color", "Exterior", "Ext. Color"]),
+      interior_color: extracted?.interior_color || vehicle.interior_color || guessColor(text, ["Interior Color", "Interior", "Int. Color"]),
+      image_url: extracted?.image_url || vehicle.image_url || guessImageUrl(html, vehicle.vin, detailUrl),
+      window_sticker_url: extracted?.window_sticker_url || vehicle.window_sticker_url || guessStickerUrl(html, vehicle.vin, detailUrl),
+      raw_data: {
+        ...(vehicle.raw_data || {}),
+        ...(extracted?.raw_data || {}),
+        detail_page_checked: true,
+      },
+    };
+  } catch (error) {
+    console.warn(`${dealer.name} detail skipped ${detailUrl}: ${errorMessage(error)}`);
+    return vehicle;
+  }
+}
+
+function vehicleFromDetailUrl(
+  url: string,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const decodedUrl = decodeHtmlEntities(decodeURIComponent(url.replace(/\+/g, " ")));
+  const vin = cleanVin(decodedUrl.match(/([A-HJ-NPR-Z0-9]{17})(?:$|[/?#])/i)?.[1] || "");
+  if (!vin) return null;
+
+  const path = new URL(url).pathname.replace(/^\/+/, "");
+  const decodedPath = decodeHtmlEntities(decodeURIComponent(path.replace(/\+/g, " ")));
+  const parts = decodedPath
+    .split("-")
+    .map((part) => cleanText(part))
+    .filter(Boolean);
+  const newIndex = parts.findIndex((part) => sameText(part, "new"));
+  const yearIndex = parts.findIndex((part) => /^\d{4}$/.test(part));
+  const brandIndex = parts.findIndex((part) => sameText(part, criteria.brand));
+
+  if (newIndex !== 0 || yearIndex < 0 || brandIndex < 0) return null;
+  if (criteria.year && Number(parts[yearIndex]) !== criteria.year) return null;
+
+  const modelParts = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
+  const afterBrand = parts.slice(brandIndex + 1, Math.max(parts.length - 1, brandIndex + 1));
+  const normalizedAfterBrand = normalizeSearchText(afterBrand.join(" "));
+  if (!modelParts.length || !modelParts.every((part) => normalizedAfterBrand.includes(part))) return null;
+
+  const modelEnd = findModelEndIndex(afterBrand, modelParts);
+  const trim = cleanText(afterBrand.slice(modelEnd).join(" ")) || "Verify";
+
+  return buildVehicle(vin, url, dealer, criteria, {
+    trim,
+    stock_number: "",
+    raw_data: { source: "sitemap_vehicle_detail_url" },
+  });
+}
+
+function findModelEndIndex(parts: string[], modelWords: string[]) {
+  const normalizedParts = parts.map((part) => normalizeSearchText(part));
+  let matched = 0;
+
+  for (let index = 0; index < normalizedParts.length; index += 1) {
+    const partWords = normalizedParts[index].split(" ").filter(Boolean);
+    if (modelWords.every((word) => partWords.includes(word))) return index + 1;
+
+    if (normalizedParts[index].includes(modelWords[matched])) {
+      matched += 1;
+      if (matched >= modelWords.length) return index + 1;
+    }
+  }
+
+  return modelWords.length;
 }
 
 async function discoverInventoryPages(
@@ -744,6 +869,10 @@ function normalizeSearchText(value: unknown) {
   return cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function sameText(a: unknown, b: unknown) {
+  return normalizeSearchText(a) === normalizeSearchText(b);
+}
+
 function stripHtml(html: string) {
   return decodeHtmlEntities(html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -758,6 +887,8 @@ function decodeHtmlEntities(value: string) {
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
     .replace(/\s+/g, " ");
 }
 
