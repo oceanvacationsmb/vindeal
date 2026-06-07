@@ -364,7 +364,20 @@ function getDealerMeta(vOrDealer = {}) {
 }
 
 function dealerRatingText(meta) {
-  return meta.google_rating ? `Google ${meta.google_rating} stars` : "Google Places needed";
+  return meta.google_rating ? `Google ${meta.google_rating} stars` : "";
+}
+
+function dealerMetaRows(meta) {
+  return [
+    dealerRatingText(meta),
+    meta.phone,
+    meta.address,
+    meta.hours,
+    meta.email,
+  ]
+    .filter(Boolean)
+    .map((item) => `<span>${item}</span>`)
+    .join("");
 }
 
 function detectDealerAddons(v) {
@@ -401,10 +414,34 @@ function vehicleIncentiveRows(v) {
   return rows;
 }
 
+function rebateStrength(v, quote) {
+  const msrp = number(quote?.msrp || v.msrp);
+  const incentive = number(quote?.incentive || v.manufacturer_rebate);
+  const ratio = msrp ? incentive / msrp : 0;
+
+  if (incentive >= 10000 || ratio >= 0.12) {
+    return {
+      className: "aggressive",
+      label: "Aggressive rebate",
+      text: `${money(incentive)} public incentive detected. Strong rebate relative to MSRP.`,
+    };
+  }
+
+  if (incentive >= 5000 || ratio >= 0.07) {
+    return {
+      className: "strong",
+      label: "Strong rebate",
+      text: `${money(incentive)} public incentive detected. Worth comparing against similar cars.`,
+    };
+  }
+
+  return null;
+}
+
 const PRICE_HELP = {
   msrp: "Manufacturer Suggested Retail Price. This is the sticker price from the manufacturer before dealer discount, incentives, taxes, fees, or add-ons.",
   dealerWebsitePrice: "The advertised price shown on the dealer website. Dealers may include, exclude, or condition this price with incentives, add-ons, or fine print, so VINDeal does not use it as the lease cap cost.",
-  adjustedCapCost: "Estimated lease cap cost before dealer discount: MSRP - verified manufacturer incentive + bank acquisition fee. Dealer discount, taxes, government fees, doc fee, add-ons, and final documents are not included here.",
+  adjustedCapCost: "Estimated base cap cost before dealer discount: MSRP - verified manufacturer incentive. Bank acquisition fee, dealer fee, add-ons, taxes, registration, and final documents are shown separately.",
   manufacturerIncentive: "Public manufacturer incentive currently attached to this vehicle/program. Extra conditional incentives require buyer qualification and dealer/manufacturer verification.",
   invoice: "Dealer invoice, when verified. This is an internal wholesale-like reference and may not include holdback, marketing support, or other dealer programs.",
   overInvoice: "Difference between the public price reference and verified invoice. Use this only as negotiation context.",
@@ -430,7 +467,7 @@ function escapeAttr(value) {
 }
 
 function helpTip(text) {
-  return `<button type="button" class="help-tip" data-help="${escapeAttr(text)}" aria-label="Explain this number">?</button>`;
+  return `<button type="button" class="help-tip" data-help="${escapeAttr(text)}" title="${escapeAttr(text)}" aria-label="Explain this number">?</button>`;
 }
 
 function priceItem(label, value, helpKey, className = "") {
@@ -533,7 +570,7 @@ function calculateLeaseQuote(v, options = {}) {
   const bankAcquisitionFee = number(v.acquisition_fee);
   const dealerAddons = number(v.dealer_addons_amount || v.junk_fee);
   const fairMarketPrice = number(v.sale_price || v.advertised_price || msrp);
-  const adjustedCapCost = Math.max(0, msrp - incentive + bankAcquisitionFee);
+  const adjustedCapCost = Math.max(0, msrp - incentive);
   const publicCapCost = adjustedCapCost;
   const residualPercent = number(program?.residual_percent || v.residual_percent);
   const residualValue = msrp * (residualPercent / 100);
@@ -1005,6 +1042,10 @@ function getBuyerQualifications() {
   return [...document.querySelectorAll("input[name='buyerQualification']:checked")].map((input) => input.value);
 }
 
+function countVehicleDealers(list = vehicles) {
+  return new Set(list.map((v) => normalizeText(v.dealer_name || v.dealer_id || "Dealer")).filter(Boolean)).size;
+}
+
 function applyFilters() {
   renderVehicles();
 }
@@ -1022,39 +1063,8 @@ function renderDealerCoverage(body) {
   const box = document.getElementById("dealerCoverage");
   if (!box) return;
 
-  const dealers = getDealersInRadius(body);
-  const dealersWithCars = new Set(vehicles.map((v) => normalizeText(v.dealer_name)));
-  const loadedDealerCount = dealersWithCars.size;
-
-  if (!dealers.length) {
-    box.classList.add("hidden");
-    return;
-  }
-
-  box.classList.remove("hidden");
-  box.innerHTML = `
-    <div class="section-head">
-      <div>
-        <h2>Dealers In Radius</h2>
-        <p>${dealers.length} active ${body.brand} dealers found within ${body.radius} miles. Inventory loaded from ${loadedDealerCount} dealer${loadedDealerCount === 1 ? "" : "s"}.</p>
-        ${loadedDealerCount < dealers.length ? `<p class="coverage-warning">More dealers are in range, but their inventory rows were not returned by the scanner/importer yet.</p>` : ""}
-      </div>
-    </div>
-    <div class="dealer-chip-grid">
-      ${dealers
-        .map((dealer) => {
-          const hasCars = dealersWithCars.has(normalizeText(dealer.name));
-          return `
-            <div class="dealer-chip ${hasCars ? "has-cars" : ""}">
-              <b>${dealer.name}</b>
-              <span>${dealer.city || ""}${dealer.state ? ", " + dealer.state : ""}${dealer.distance_miles ? " - " + dealer.distance_miles + " miles" : ""}</span>
-              <em>${hasCars ? "Inventory loaded" : "Dealer found, inventory not loaded"}</em>
-            </div>
-          `;
-        })
-        .join("")}
-    </div>
-  `;
+  box.classList.add("hidden");
+  box.innerHTML = "";
 }
 
 async function scanBackendInventory() {
@@ -1092,6 +1102,9 @@ async function scanBackendInventory() {
     interiorColors: getSelectedInteriorColors(),
 
     selectedRebates: getSelectedRebates(),
+    searchScope: "all_dealers_in_radius",
+    useCachedInventoryFallback: false,
+    ignoreSeedDealerLimit: true,
   };
   lastSearchBody = body;
 
@@ -1119,20 +1132,9 @@ async function scanBackendInventory() {
       throw new Error(data.error || "Backend error");
     }
 
-    vehicles = data.vehicles || [];
-
-    if (!vehicles.length) {
-      const cachedVehicles = await loadCachedVehicles(body);
-
-      if (cachedVehicles.length) {
-        vehicles = cachedVehicles;
-        data.count = cachedVehicles.length;
-        data.dealer_count = getDealersInRadius(body).length;
-        setResultsSource("Showing cached Supabase inventory. If only one dealer has cars, the scanner/importer has not loaded the other dealers yet.");
-      }
-    } else {
-      setResultsSource("Showing fresh live scan results.");
-    }
+    vehicles = (data.vehicles || []).map(normalizeCachedVehicle);
+    data.count = vehicles.length;
+    setResultsSource("");
 
     removedVins = new Set();
     selectedVins = new Set();
@@ -1147,7 +1149,7 @@ async function scanBackendInventory() {
     buildResultFilters();
     renderDealerCoverage(body);
 
-    document.getElementById("dealerCount").textContent = getDealersInRadius(body).length || data.dealer_count || 0;
+    document.getElementById("dealerCount").textContent = countVehicleDealers(vehicles);
     document.getElementById("vehicleCount").textContent = data.count || 0;
 
     renderProgramStatus(data);
@@ -1204,7 +1206,7 @@ function renderVehicles() {
   updateSelectedCount();
 
   if (!visibleVehicles.length) {
-    list.innerHTML = `<div class="empty-box">No vehicles found.</div>`;
+    list.innerHTML = `<div class="empty-box">No live inventory returned for this search.</div>`;
     renderComparePanel();
     return;
   }
@@ -1224,11 +1226,7 @@ function renderVehicles() {
               <h3>${dealerName}</h3>
               <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""} ${first.dealer_distance_miles ? " - " + first.dealer_distance_miles + " miles away" : ""}</p>
               <div class="dealer-meta">
-                <span>${dealerRatingText(meta)}</span>
-                <span>${meta.phone || "Phone not loaded"}</span>
-                <span>${meta.address || "Address not loaded"}</span>
-                <span>${meta.hours || "Hours not loaded"}</span>
-                <span>${meta.email || "Email not loaded"}</span>
+                ${dealerMetaRows(meta)}
               </div>
             </div>
             <strong>${dealerVehicles.length} cars</strong>
@@ -1255,6 +1253,7 @@ function renderVehicleCard(v) {
   const taxEstimate = calculateTax(quote.totalPayments || basePayment * quote.term || quote.adjustedCapCost, registrationState);
   const dealerAddons = detectDealerAddons(v);
   const incentiveRows = vehicleIncentiveRows(v);
+  const rebateBadge = rebateStrength(v, quote);
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
   const isFavorite = favoriteVins.has(v.vin);
   const isSelected = selectedVins.has(v.vin);
@@ -1298,7 +1297,7 @@ function renderVehicleCard(v) {
         <div class="price-box">
           ${priceItem("MSRP", money(v.msrp), "msrp")}
           ${priceItem("Dealer Website Price", money(v.sale_price), "dealerWebsitePrice")}
-          ${priceItem("Adjusted Cap Cost Est.", money(quote.adjustedCapCost), "adjustedCapCost")}
+          ${priceItem("Base Cap Cost Est.", money(quote.adjustedCapCost), "adjustedCapCost")}
           ${priceItem("Manufacturer Incentive", quote.incentive ? money(quote.incentive) : "None found", "manufacturerIncentive")}
           ${showInvoice ? priceItem("Invoice", money(v.invoice_price), "invoice") : ""}
           ${showInvoice ? priceItem("Over Invoice", money(v.profit_over_invoice), "overInvoice") : ""}
@@ -1345,7 +1344,7 @@ function renderVehicleCard(v) {
 
         <div class="formula-box">
           <b>Estimate Disclaimer</b>
-          <span>Lease structure: adjusted cap cost = MSRP - manufacturer incentive + bank acquisition fee. Estimated monthly = depreciation charge plus rent charge.</span>
+          <span>Lease structure: base cap cost = MSRP - manufacturer incentive. Bank acquisition fee, dealer fee, taxes, and add-ons are shown separately.</span>
           <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) x money factor.</span>
           <span>Before dealer discount, taxes, registration/government fees, doc fee, dealer add-ons, and final dealer documents.</span>
         </div>
@@ -1364,6 +1363,8 @@ function renderVehicleCard(v) {
 
         <div class="rebate-list">
           <b>Available Manufacturer Incentives</b>
+          ${rebateBadge ? `<div class="rebate-badge ${rebateBadge.className}"><strong>${rebateBadge.label}</strong><span>${rebateBadge.text}</span></div>` : ""}
+          <span>You may be eligible for additional manufacturer or dealer rebates based on qualifications such as loyalty, conquest, military, first responder, education, healthcare, location, or lender approval. Dealer must verify.</span>
           ${
             incentiveRows.length
               ? incentiveRows
@@ -1470,7 +1471,7 @@ function renderComparePanel() {
               <span>${v.dealer_name || "Dealer"}</span>
               <div><small>MSRP</small><strong>${money(v.msrp)}</strong></div>
               <div><small>Website Price</small><strong>${money(v.sale_price)}</strong></div>
-              <div><small>Adjusted Cap Cost</small><strong>${money(quote.adjustedCapCost)}</strong></div>
+              <div><small>Base Cap Cost</small><strong>${money(quote.adjustedCapCost)}</strong></div>
               <div><small>Incentive</small><strong>${quote.incentive ? money(quote.incentive) : "None"}</strong></div>
               <div><small>Estimated Monthly</small><strong>${quote.monthlyPayment ? `${money(quote.monthlyPayment)}/mo` : "Verify"}</strong></div>
               <div><small>Total Payments</small><strong>${quote.totalPayments ? money(quote.totalPayments) : "Verify"}</strong></div>
