@@ -296,6 +296,125 @@ function setSearchProgress(percent, title, text) {
   if (textEl) textEl.textContent = text;
 }
 
+function resetSearchProgressLog() {
+  const log = document.getElementById("searchProgressLog");
+  if (log) log.innerHTML = "";
+}
+
+function addSearchProgressLog(percent, title, detail = "") {
+  const log = document.getElementById("searchProgressLog");
+  if (!log) return;
+
+  const event = document.createElement("div");
+  event.className = "progress-event";
+  event.innerHTML = `
+    <div class="progress-pct">${Math.max(0, Math.min(100, percent))}%</div>
+    <div>
+      <b>${title}</b>
+      ${detail ? `<span>${detail}</span>` : ""}
+    </div>
+  `;
+  log.appendChild(event);
+  log.scrollTop = log.scrollHeight;
+}
+
+function upsertLiveDealer(dealer) {
+  const normalized = normalizeBackendDealer(dealer);
+  const key = normalizeText(normalized.name);
+  const existingIndex = lastDealersInRadius.findIndex((item) => normalizeText(item.name) === key);
+
+  if (existingIndex >= 0) {
+    lastDealersInRadius[existingIndex] = { ...lastDealersInRadius[existingIndex], ...normalized };
+  } else {
+    lastDealersInRadius.push(normalized);
+  }
+
+  lastDealersInRadius.sort((a, b) => number(a.distance_miles) - number(b.distance_miles));
+  document.getElementById("dealerCount").textContent = lastDealersInRadius.length;
+  renderDealerCoverage(lastSearchBody);
+}
+
+function appendLiveVehicles(list = []) {
+  const incoming = list.map(normalizeCachedVehicle);
+  const existing = new Set(vehicles.map((v) => v.vin || `${v.dealer_name}-${v.stock_number}-${v.listing_url}`));
+
+  incoming.forEach((vehicle) => {
+    const key = vehicle.vin || `${vehicle.dealer_name}-${vehicle.stock_number}-${vehicle.listing_url}`;
+    if (!existing.has(key)) {
+      existing.add(key);
+      vehicles.push(vehicle);
+    }
+  });
+
+  document.getElementById("vehicleCount").textContent = vehicles.length;
+}
+
+function applySearchProgressEvent(event = {}, body = lastSearchBody) {
+  const percentValue = number(event.percent || event.progress);
+  const percentDone = percentValue ? Math.min(99, Math.max(0, percentValue)) : 0;
+  const type = event.type || event.event || event.status || "";
+
+  if (percentDone) {
+    setSearchProgress(percentDone, event.title || "Searching", event.message || event.detail || "");
+  }
+
+  if (type === "dealer_found" && event.dealer) {
+    upsertLiveDealer(event.dealer);
+    addSearchProgressLog(percentDone || 15, `Found dealer: ${event.dealer.name || event.dealer.dealer_name || "Dealer"}`, event.message || "");
+  } else if (type === "inventory_found" && Array.isArray(event.vehicles)) {
+    appendLiveVehicles(event.vehicles);
+    addSearchProgressLog(percentDone || 60, `Found ${event.vehicles.length} car${event.vehicles.length === 1 ? "" : "s"}`, event.dealer_name || "");
+  } else if (event.title || event.message) {
+    addSearchProgressLog(percentDone || 0, event.title || "Search update", event.message || event.detail || "");
+  }
+
+  if (body && lastDealersInRadius.length) renderDealerCoverage(body);
+}
+
+async function readInventorySearchResponse(response, body) {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/x-ndjson") && response.body?.getReader) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      lines.filter(Boolean).forEach((line) => {
+        const event = JSON.parse(line);
+        if (event.type === "done" || event.event === "done") {
+          finalData = event.data || event;
+        } else {
+          applySearchProgressEvent(event, body);
+        }
+      });
+    }
+
+    if (buffer.trim()) {
+      const event = JSON.parse(buffer);
+      finalData = event.data || event;
+    }
+
+    return finalData || { ok: response.ok, dealers: lastDealersInRadius, vehicles };
+  }
+
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Backend returned non-JSON. Status ${response.status}. ${text}`);
+  }
+}
+
 function getTaxRule(state) {
   return STATE_TAX_RULES[state] || STATE_TAX_RULES.SC;
 }
@@ -1200,6 +1319,8 @@ async function scanBackendInventory() {
   btn.disabled = true;
   btn.textContent = "Searching...";
 
+  vehicles = [];
+  lastDealersInRadius = [];
   document.getElementById("vehicleList").innerHTML = "";
   document.getElementById("dealerCount").textContent = "0";
   document.getElementById("vehicleCount").textContent = "0";
@@ -1207,7 +1328,9 @@ async function scanBackendInventory() {
   document.getElementById("resultFilters")?.classList.add("hidden");
   document.getElementById("dealerCoverage")?.classList.add("hidden");
   setSearchUiState("loading");
-  setSearchProgress(8, "Searching dealers", "Finding dealers near your ZIP code.");
+  setSearchProgress(0, "Starting search", "Preparing Hyundai dealer and inventory search.");
+  resetSearchProgressLog();
+  addSearchProgressLog(0, "Search started", "Preparing request.");
   setResultsSource("");
 
   const body = {
@@ -1231,40 +1354,34 @@ async function scanBackendInventory() {
 
     selectedRebates: getSelectedRebates(),
     searchScope: "all_dealers_in_radius",
+    progressMode: "ndjson",
     useCachedInventoryFallback: false,
     ignoreSeedDealerLimit: true,
   };
   lastSearchBody = body;
-  lastDealersInRadius = [];
-  document.getElementById("dealerCount").textContent = "0";
-  setSearchProgress(30, "Live dealer search", `Searching Hyundai dealers within ${body.radius} miles from ${body.zipCode}.`);
+  setSearchProgress(10, "Finding dealers", `Searching Hyundai dealers within ${body.radius} miles from ${body.zipCode}.`);
+  addSearchProgressLog(10, "Finding dealers", `${body.brand} dealers near ${body.zipCode}.`);
 
   try {
-    setSearchProgress(55, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${body.model}.`);
+    setSearchProgress(35, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${body.model}.`);
+    addSearchProgressLog(35, "Searching inventory", "Waiting for backend dealer scanner.");
     const response = await fetch(SCAN_INVENTORY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/x-ndjson, application/json",
         ...authHeaders(),
       },
       body: JSON.stringify(body),
     });
 
-    const text = await response.text();
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      throw new Error(`Backend returned non-JSON. Status ${response.status}. ${text}`);
-    }
+    const data = await readInventorySearchResponse(response, body);
 
     if (!response.ok || !data.ok) {
       throw new Error(data.error || "Backend error");
     }
 
-    vehicles = (data.vehicles || []).map(normalizeCachedVehicle);
+    vehicles = data.vehicles ? data.vehicles.map(normalizeCachedVehicle) : vehicles;
     lastDealersInRadius = normalizeBackendDealers(data, vehicles);
     data.count = vehicles.length;
     setResultsSource(data.search_source ? `Source: ${data.search_source}` : "");
@@ -1272,6 +1389,11 @@ async function scanBackendInventory() {
       85,
       "Inventory found",
       `${lastDealersInRadius.length} dealer${lastDealersInRadius.length === 1 ? "" : "s"} checked, ${vehicles.length} car${vehicles.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`
+    );
+    addSearchProgressLog(
+      85,
+      "Search response received",
+      `${lastDealersInRadius.length} dealer${lastDealersInRadius.length === 1 ? "" : "s"} and ${vehicles.length} car${vehicles.length === 1 ? "" : "s"} returned.`
     );
 
     removedVins = new Set();
@@ -1287,7 +1409,7 @@ async function scanBackendInventory() {
     buildResultFilters();
     renderDealerCoverage(body);
 
-    document.getElementById("dealerCount").textContent = data.dealer_count || lastDealersInRadius.length || countVehicleDealers(vehicles);
+    document.getElementById("dealerCount").textContent = lastDealersInRadius.length || countVehicleDealers(vehicles);
     document.getElementById("vehicleCount").textContent = data.count || 0;
 
     renderProgramStatus(data);

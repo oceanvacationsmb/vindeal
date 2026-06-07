@@ -481,6 +481,42 @@ body {
   transition: width 0.25s ease;
 }
 
+.progress-log {
+  width: min(620px, 100%);
+  max-height: 180px;
+  margin-top: 18px;
+  overflow: auto;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+
+.progress-event {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  font-size: 13px;
+}
+
+.progress-event b {
+  color: #172033;
+}
+
+.progress-event span {
+  color: #64748b;
+}
+
+.progress-event .progress-pct {
+  color: #2563eb;
+  font-weight: 900;
+}
+
 .loader {
   width: 46px;
   height: 46px;
