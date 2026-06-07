@@ -8,6 +8,8 @@ type SearchBody = {
   progressMode?: string;
 };
 
+const SCANNER_VERSION = "2026-06-07-url-continue-v2";
+
 type Dealer = {
   name: string;
   address?: string;
@@ -141,6 +143,7 @@ async function runSearch(body: SearchBody, emit: (event: Record<string, unknown>
   if (!dealers.length) {
     return {
       ok: true,
+      scanner_version: SCANNER_VERSION,
       search_source: "Google Places dealer discovery + compliant dealer-site scan",
       dealers: [],
       vehicles: [],
@@ -197,6 +200,7 @@ async function runSearch(body: SearchBody, emit: (event: Record<string, unknown>
 
   return {
     ok: true,
+    scanner_version: SCANNER_VERSION,
     search_source: "Google Places dealer discovery + compliant dealer-site scan",
     dealers,
     vehicles: uniqueVehicles,
