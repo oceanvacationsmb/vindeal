@@ -361,6 +361,58 @@ function getDealersInRadius(body) {
     .sort((a, b) => number(a.distance_miles) - number(b.distance_miles));
 }
 
+function normalizeBackendDealer(dealer = {}) {
+  const name = dealer.name || dealer.dealer_name || dealer.dealerName || "Dealer";
+
+  return {
+    ...dealer,
+    name,
+    city: dealer.city || dealer.dealer_city || "",
+    state: dealer.state || dealer.dealer_state || "",
+    website: dealer.website || dealer.dealer_website || dealer.url || "",
+    phone: dealer.phone || dealer.dealer_phone || "",
+    email: dealer.email || dealer.dealer_email || "",
+    address: dealer.address || dealer.dealer_address || "",
+    hours: dealer.hours || dealer.dealer_hours || "",
+    google_rating: dealer.google_rating || dealer.rating || "",
+    distance_miles: number(dealer.distance_miles || dealer.dealer_distance_miles || dealer.distance || 0),
+  };
+}
+
+function dealersFromVehicles(list = []) {
+  const byDealer = new Map();
+
+  list.forEach((vehicle) => {
+    const name = vehicle.dealer_name || "Dealer";
+    const key = normalizeText(name);
+    if (byDealer.has(key)) return;
+
+    byDealer.set(
+      key,
+      normalizeBackendDealer({
+        name,
+        city: vehicle.dealer_city,
+        state: vehicle.dealer_state,
+        website: vehicle.dealer_website,
+        phone: vehicle.dealer_phone,
+        email: vehicle.dealer_email,
+        address: vehicle.dealer_address,
+        hours: vehicle.dealer_hours,
+        google_rating: vehicle.google_rating,
+        distance_miles: vehicle.dealer_distance_miles,
+      })
+    );
+  });
+
+  return [...byDealer.values()].sort((a, b) => number(a.distance_miles) - number(b.distance_miles));
+}
+
+function normalizeBackendDealers(data = {}, list = []) {
+  const rawDealers = data.dealers || data.dealerCoverage || data.dealer_coverage || data.dealers_found || [];
+  const normalized = Array.isArray(rawDealers) ? rawDealers.map(normalizeBackendDealer) : [];
+  return normalized.length ? normalized.sort((a, b) => number(a.distance_miles) - number(b.distance_miles)) : dealersFromVehicles(list);
+}
+
 function getDealerMeta(vOrDealer = {}) {
   const dealerName = vOrDealer.dealer_name || vOrDealer.name || "";
   const dealer = dealersCatalog.find((item) => sameText(item.name, dealerName)) || {};
@@ -1107,7 +1159,7 @@ function renderDealerCoverage(body) {
   const box = document.getElementById("dealerCoverage");
   if (!box) return;
 
-  const dealers = lastDealersInRadius.length ? lastDealersInRadius : getDealersInRadius(body);
+  const dealers = lastDealersInRadius;
   const carsByDealer = vehicles.reduce((acc, v) => {
     const key = normalizeText(v.dealer_name || "Dealer");
     acc[key] = (acc[key] || 0) + 1;
@@ -1183,10 +1235,9 @@ async function scanBackendInventory() {
     ignoreSeedDealerLimit: true,
   };
   lastSearchBody = body;
-  lastDealersInRadius = getDealersInRadius(body);
-  document.getElementById("dealerCount").textContent = lastDealersInRadius.length;
-  setSearchProgress(30, "Dealers found", `${lastDealersInRadius.length} dealer${lastDealersInRadius.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`);
-  renderDealerCoverage(body);
+  lastDealersInRadius = [];
+  document.getElementById("dealerCount").textContent = "0";
+  setSearchProgress(30, "Live dealer search", `Searching Hyundai dealers within ${body.radius} miles from ${body.zipCode}.`);
 
   try {
     setSearchProgress(55, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${body.model}.`);
@@ -1214,9 +1265,14 @@ async function scanBackendInventory() {
     }
 
     vehicles = (data.vehicles || []).map(normalizeCachedVehicle);
+    lastDealersInRadius = normalizeBackendDealers(data, vehicles);
     data.count = vehicles.length;
-    setResultsSource("");
-    setSearchProgress(85, "Inventory found", `${vehicles.length} car${vehicles.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`);
+    setResultsSource(data.search_source ? `Source: ${data.search_source}` : "");
+    setSearchProgress(
+      85,
+      "Inventory found",
+      `${lastDealersInRadius.length} dealer${lastDealersInRadius.length === 1 ? "" : "s"} checked, ${vehicles.length} car${vehicles.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`
+    );
 
     removedVins = new Set();
     selectedVins = new Set();
@@ -1231,7 +1287,7 @@ async function scanBackendInventory() {
     buildResultFilters();
     renderDealerCoverage(body);
 
-    document.getElementById("dealerCount").textContent = lastDealersInRadius.length || countVehicleDealers(vehicles);
+    document.getElementById("dealerCount").textContent = data.dealer_count || lastDealersInRadius.length || countVehicleDealers(vehicles);
     document.getElementById("vehicleCount").textContent = data.count || 0;
 
     renderProgramStatus(data);
