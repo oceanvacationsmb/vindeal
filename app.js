@@ -690,7 +690,7 @@ function escapeAttr(value) {
 }
 
 function helpTip(text) {
-  return `<button type="button" class="help-tip" data-help="${escapeAttr(text)}" title="${escapeAttr(text)}" aria-label="Explain this number">?</button>`;
+  return `<button type="button" class="help-tip" data-help="${escapeAttr(text)}" aria-label="Explain this number">?</button>`;
 }
 
 function priceItem(label, value, helpKey, className = "") {
