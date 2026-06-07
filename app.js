@@ -14,6 +14,8 @@ let favoriteVins = new Set();
 let selectedVins = new Set();
 let compareVins = new Set();
 let lastSearchBody = null;
+let resultSort = "closest";
+let lastDealersInRadius = [];
 let activeResultFilters = {
   dealer: new Set(),
   trim: new Set(),
@@ -282,6 +284,16 @@ function setSearchUiState(state) {
   document.getElementById("loadingPanel")?.classList.toggle("hidden", !isLoading);
   document.getElementById("searchSummary")?.classList.toggle("hidden", !isResults);
   document.getElementById("resultsHead")?.classList.toggle("hidden", !isResults);
+}
+
+function setSearchProgress(percent, title, text) {
+  const bar = document.getElementById("searchProgressBar");
+  const titleEl = document.getElementById("searchProgressTitle");
+  const textEl = document.getElementById("searchProgressText");
+
+  if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  if (titleEl) titleEl.textContent = title;
+  if (textEl) textEl.textContent = text;
 }
 
 function getTaxRule(state) {
@@ -1057,6 +1069,31 @@ function applyFilters() {
   renderVehicles();
 }
 
+function vehicleDiscount(v) {
+  return Math.max(0, number(v.msrp) - number(v.sale_price || v.advertised_price || v.msrp)) + number(v.manufacturer_rebate);
+}
+
+function vehicleDealScore(v) {
+  const msrp = number(v.msrp);
+  if (!msrp) return 0;
+  return vehicleDiscount(v) / msrp;
+}
+
+function sortVehicleList(list) {
+  return [...list].sort((a, b) => {
+    if (resultSort === "price_low") return number(a.sale_price || a.advertised_price || a.msrp) - number(b.sale_price || b.advertised_price || b.msrp);
+    if (resultSort === "price_high") return number(b.sale_price || b.advertised_price || b.msrp) - number(a.sale_price || a.advertised_price || a.msrp);
+    if (resultSort === "discount") return vehicleDiscount(b) - vehicleDiscount(a);
+    if (resultSort === "deal") return vehicleDealScore(b) - vehicleDealScore(a);
+    return number(a.dealer_distance_miles) - number(b.dealer_distance_miles);
+  });
+}
+
+function updateResultSort(value) {
+  resultSort = value || "closest";
+  renderVehicles();
+}
+
 function matchesLocalFilters(v) {
   const dealerOk = !activeResultFilters.dealer.size || activeResultFilters.dealer.has(v.dealer_name || "Dealer");
   const trimOk = !activeResultFilters.trim.size || activeResultFilters.trim.has(v.trim);
@@ -1070,8 +1107,39 @@ function renderDealerCoverage(body) {
   const box = document.getElementById("dealerCoverage");
   if (!box) return;
 
-  box.classList.add("hidden");
-  box.innerHTML = "";
+  const dealers = lastDealersInRadius.length ? lastDealersInRadius : getDealersInRadius(body);
+  const carsByDealer = vehicles.reduce((acc, v) => {
+    const key = normalizeText(v.dealer_name || "Dealer");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  if (!dealers.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="dealer-chip-grid">
+      ${dealers
+        .map((dealer) => {
+          const count = carsByDealer[normalizeText(dealer.name)] || 0;
+          const meta = getDealerMeta(dealer);
+          return `
+            <div class="dealer-chip ${count ? "has-cars" : ""}">
+              <b>${dealer.name}</b>
+              <span>${dealer.city || ""}${dealer.state ? ", " + dealer.state : ""}${dealer.distance_miles ? " - " + dealer.distance_miles + " miles" : ""}</span>
+              ${meta.phone ? `<span>${meta.phone}</span>` : ""}
+              ${meta.website ? `<span>${meta.website}</span>` : ""}
+              <em>${count ? `${count} car${count === 1 ? "" : "s"} found` : "Dealer found"}</em>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 async function scanBackendInventory() {
@@ -1087,6 +1155,7 @@ async function scanBackendInventory() {
   document.getElementById("resultFilters")?.classList.add("hidden");
   document.getElementById("dealerCoverage")?.classList.add("hidden");
   setSearchUiState("loading");
+  setSearchProgress(8, "Searching dealers", "Finding dealers near your ZIP code.");
   setResultsSource("");
 
   const body = {
@@ -1114,8 +1183,13 @@ async function scanBackendInventory() {
     ignoreSeedDealerLimit: true,
   };
   lastSearchBody = body;
+  lastDealersInRadius = getDealersInRadius(body);
+  document.getElementById("dealerCount").textContent = lastDealersInRadius.length;
+  setSearchProgress(30, "Dealers found", `${lastDealersInRadius.length} dealer${lastDealersInRadius.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`);
+  renderDealerCoverage(body);
 
   try {
+    setSearchProgress(55, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${body.model}.`);
     const response = await fetch(SCAN_INVENTORY_URL, {
       method: "POST",
       headers: {
@@ -1142,6 +1216,7 @@ async function scanBackendInventory() {
     vehicles = (data.vehicles || []).map(normalizeCachedVehicle);
     data.count = vehicles.length;
     setResultsSource("");
+    setSearchProgress(85, "Inventory found", `${vehicles.length} car${vehicles.length === 1 ? "" : "s"} found within ${body.radius} miles from ${body.zipCode}.`);
 
     removedVins = new Set();
     selectedVins = new Set();
@@ -1156,10 +1231,11 @@ async function scanBackendInventory() {
     buildResultFilters();
     renderDealerCoverage(body);
 
-    document.getElementById("dealerCount").textContent = countVehicleDealers(vehicles);
+    document.getElementById("dealerCount").textContent = lastDealersInRadius.length || countVehicleDealers(vehicles);
     document.getElementById("vehicleCount").textContent = data.count || 0;
 
     renderProgramStatus(data);
+    setSearchProgress(100, "Results ready", `${vehicles.length} car${vehicles.length === 1 ? "" : "s"} ready to review.`);
     setSearchUiState("results");
     renderVehicles();
   } catch (error) {
@@ -1206,7 +1282,7 @@ function groupByDealer(list) {
 
 function renderVehicles() {
   const list = document.getElementById("vehicleList");
-  const visibleVehicles = vehicles.filter((v) => !removedVins.has(v.vin)).filter(matchesLocalFilters);
+  const visibleVehicles = sortVehicleList(vehicles.filter((v) => !removedVins.has(v.vin)).filter(matchesLocalFilters));
   const visibleVins = new Set(vehicles.filter((v) => !removedVins.has(v.vin)).map((v) => v.vin));
   selectedVins = new Set([...selectedVins].filter((vin) => visibleVins.has(vin)));
   compareVins = new Set([...compareVins].filter((vin) => visibleVins.has(vin)));
@@ -1214,14 +1290,25 @@ function renderVehicles() {
 
   if (!visibleVehicles.length) {
     list.innerHTML = `<div class="empty-box">No live inventory returned for this search.</div>`;
+    if (lastSearchBody) renderDealerCoverage(lastSearchBody);
     renderComparePanel();
     return;
   }
 
   const grouped = groupByDealer(visibleVehicles);
+  const groupedEntries = Object.entries(grouped).sort(([, a], [, b]) => {
+    const firstA = a[0] || {};
+    const firstB = b[0] || {};
+
+    if (resultSort === "closest") {
+      return number(firstA.dealer_distance_miles) - number(firstB.dealer_distance_miles);
+    }
+
+    return 0;
+  });
 
   list.innerHTML = `
-    ${Object.entries(grouped)
+    ${groupedEntries
     .map(([dealerName, dealerVehicles]) => {
       const first = dealerVehicles[0];
       const meta = getDealerMeta(first);
@@ -1240,7 +1327,7 @@ function renderVehicles() {
           </div>
 
           <div class="vehicle-grid">
-            ${dealerVehicles.map((v) => renderVehicleCard(v)).join("")}
+            ${sortVehicleList(dealerVehicles).map((v) => renderVehicleCard(v)).join("")}
           </div>
         </div>
       `;

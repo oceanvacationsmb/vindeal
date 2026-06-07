@@ -197,9 +197,11 @@
         </section>
 
         <section id="loadingPanel" class="loading-panel hidden">
-          <div class="loader"></div>
-          <strong>Searching dealer inventory</strong>
-          <span>Checking active dealers and cached inventory.</span>
+          <div class="progress-shell">
+            <div id="searchProgressBar" class="progress-bar"></div>
+          </div>
+          <strong id="searchProgressTitle">Searching dealers</strong>
+          <span id="searchProgressText">Finding dealers near your ZIP code.</span>
         </section>
 
         <section id="emptyState" class="empty-state">
@@ -220,6 +222,16 @@
         <section id="dealerCoverage" class="dealer-coverage hidden"></section>
 
         <section id="resultFilters" class="result-filters hidden">
+          <div class="sort-row">
+            <label for="resultSort">Sort</label>
+            <select id="resultSort" onchange="updateResultSort(this.value)">
+              <option value="closest" selected>Closest dealer</option>
+              <option value="price_low">Price low to high</option>
+              <option value="price_high">Price high to low</option>
+              <option value="discount">Best discount</option>
+              <option value="deal">Best deal</option>
+            </select>
+          </div>
           <div id="filterChips"></div>
         </section>
 
@@ -331,6 +343,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=87"></script>
+  <script src="app.js?v=88"></script>
 </body>
 </html>
