@@ -54,6 +54,9 @@ const USER_AGENT = "VINDealBot/0.1 (+https://oceanvacationsmb.github.io/vindeal/
 const MAX_DEALERS_TO_SCAN = 12;
 const MAX_PAGES_PER_DEALER = 4;
 const MAX_HTML_CHARS = 900_000;
+const KNOWN_ZIPS: Record<string, { latitude: number; longitude: number }> = {
+  "29577": { latitude: 33.6891, longitude: -78.8867 },
+};
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -207,12 +210,22 @@ async function runSearch(body: SearchBody, emit: (event: Record<string, unknown>
 }
 
 async function geocodeZip(zipCode: string, googleKey: string) {
+  const knownZip = KNOWN_ZIPS[zipCode];
+  if (knownZip) return knownZip;
+
+  const publicZip = await geocodeZipWithPublicApi(zipCode).catch(() => null);
+  if (publicZip) return publicZip;
+
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-  url.searchParams.set("address", zipCode);
+  url.searchParams.set("address", `${zipCode}, USA`);
   url.searchParams.set("components", "country:US");
   url.searchParams.set("key", googleKey);
 
   const data = await fetchJson(url.toString());
+  if (data?.status && data.status !== "OK") {
+    throw new Error(data.error_message || `Google Geocoding returned ${data.status} for ZIP ${zipCode}.`);
+  }
+
   const location = data?.results?.[0]?.geometry?.location;
 
   if (!location) {
@@ -222,6 +235,18 @@ async function geocodeZip(zipCode: string, googleKey: string) {
   return {
     latitude: Number(location.lat),
     longitude: Number(location.lng),
+  };
+}
+
+async function geocodeZipWithPublicApi(zipCode: string) {
+  const data = await fetchJson(`https://api.zippopotam.us/us/${encodeURIComponent(zipCode)}`);
+  const place = data?.places?.[0];
+
+  if (!place) return null;
+
+  return {
+    latitude: Number(place.latitude),
+    longitude: Number(place.longitude),
   };
 }
 
