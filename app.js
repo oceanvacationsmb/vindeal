@@ -288,10 +288,13 @@ function setSearchUiState(state) {
 
 function setSearchProgress(percent, title, text) {
   const bar = document.getElementById("searchProgressBar");
+  const percentEl = document.getElementById("searchProgressPercent");
   const titleEl = document.getElementById("searchProgressTitle");
   const textEl = document.getElementById("searchProgressText");
+  const cleanPercent = Math.max(0, Math.min(100, Number(percent || 0)));
 
-  if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  if (bar) bar.style.width = `${cleanPercent}%`;
+  if (percentEl) percentEl.textContent = `${cleanPercent}%`;
   if (titleEl) titleEl.textContent = title;
   if (textEl) textEl.textContent = text;
 }
@@ -316,6 +319,20 @@ function addSearchProgressLog(percent, title, detail = "") {
   `;
   log.appendChild(event);
   log.scrollTop = log.scrollHeight;
+}
+
+function dedupeVehicles(list = []) {
+  const seen = new Set();
+  const cleaned = [];
+
+  list.forEach((vehicle) => {
+    const key = normalizeText(vehicle.vin || `${vehicle.dealer_name}-${vehicle.stock_number}-${vehicle.listing_url}`);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    cleaned.push(vehicle);
+  });
+
+  return cleaned;
 }
 
 function upsertLiveDealer(dealer) {
@@ -346,6 +363,7 @@ function appendLiveVehicles(list = []) {
     }
   });
 
+  vehicles = dedupeVehicles(vehicles);
   document.getElementById("vehicleCount").textContent = vehicles.length;
 }
 
@@ -598,6 +616,16 @@ function vehicleIncentiveRows(v) {
 
   addRow("Manufacturer incentive applied", v.manufacturer_rebate || raw.detected_rebate, "Included in the public estimate.");
 
+  rebatesCatalog
+    .filter((r) => sameText(r.brand, v.brand) && sameText(r.model, v.model) && Number(r.year) === Number(v.year))
+    .forEach((r) => {
+      addRow(
+        r.rebate_name || "Manufacturer incentive",
+        r.amount,
+        `${r.customer_must_qualify ? "Must qualify. " : "General public. "}${r.verified ? "Verified." : "Dealer/OEM verification needed."}`
+      );
+    });
+
   (v.available_rebates || raw.available_rebates || []).forEach((r) => {
     addRow(
       r.rebate_name || r.name || "Manufacturer incentive",
@@ -672,6 +700,10 @@ function priceItem(label, value, helpKey, className = "") {
       <b>${value}</b>
     </div>
   `;
+}
+
+function moneyOrVerify(value) {
+  return number(value) ? money(value) : "Verify";
 }
 
 function normalizeStickerUrl(v) {
@@ -1386,7 +1418,7 @@ async function scanBackendInventory() {
       throw new Error(data.error || "Backend error");
     }
 
-    vehicles = data.vehicles ? data.vehicles.map(normalizeCachedVehicle) : vehicles;
+    vehicles = data.vehicles ? dedupeVehicles(data.vehicles.map(normalizeCachedVehicle)) : dedupeVehicles(vehicles);
     lastDealersInRadius = normalizeBackendDealers(data, vehicles);
     data.count = vehicles.length;
     setResultsSource(data.search_source ? `Source: ${data.search_source}` : "");
@@ -1566,15 +1598,22 @@ function renderVehicleCard(v) {
           </label>
         </div>
 
+        <div class="vehicle-facts">
+          <span><b>VIN</b>${v.vin || "Verify"}</span>
+          <span><b>Stock</b>${v.stock_number || "Verify"}</span>
+          <span><b>Model</b>${v.model || "Verify"}</span>
+          <span><b>Trim</b>${v.trim || "Verify"}</span>
+        </div>
+
         <div class="color-row">
-          <span>Ext: ${v.exterior_color || "Unknown"}</span>
-          <span>Int: ${v.interior_color || "Unknown"}</span>
+          <span>Exterior: ${v.exterior_color || "Verify with dealer"}</span>
+          <span>Interior: ${v.interior_color || "Verify with dealer"}</span>
         </div>
 
         <div class="price-box">
-          ${priceItem("MSRP", money(v.msrp), "msrp")}
-          ${priceItem("Dealer Website Price", money(v.sale_price), "dealerWebsitePrice")}
-          ${priceItem("Base Cap Cost Est.", money(quote.adjustedCapCost), "adjustedCapCost")}
+          ${priceItem("MSRP", moneyOrVerify(v.msrp), "msrp")}
+          ${priceItem("Dealer Website Price", moneyOrVerify(v.sale_price), "dealerWebsitePrice")}
+          ${priceItem("Base Cap Cost Est.", quote.adjustedCapCost ? money(quote.adjustedCapCost) : "Verify", "adjustedCapCost")}
           ${priceItem("Manufacturer Incentive", quote.incentive ? money(quote.incentive) : "None found", "manufacturerIncentive")}
           ${showInvoice ? priceItem("Invoice", money(v.invoice_price), "invoice") : ""}
           ${showInvoice ? priceItem("Over Invoice", money(v.profit_over_invoice), "overInvoice") : ""}

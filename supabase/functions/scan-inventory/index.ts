@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-url-continue-v2";
+const SCANNER_VERSION = "2026-06-07-strict-model-v3";
 
 type Dealer = {
   name: string;
@@ -36,6 +36,8 @@ type Vehicle = {
   listing_url?: string;
   window_sticker_url?: string;
   image_url?: string;
+  exterior_color?: string;
+  interior_color?: string;
   dealer_name?: string;
   dealer_city?: string;
   dealer_state?: string;
@@ -304,6 +306,7 @@ async function findDealers({
         place_id: String(place.id || name),
       };
 
+      if (!dealer.website && !dealer.phone) return;
       if (dealersByPlaceId.has(dealer.place_id)) return;
 
       dealersByPlaceId.set(dealer.place_id, dealer);
@@ -430,7 +433,10 @@ async function discoverInventoryPages(
     const links = [...homepage.matchAll(/href=["']([^"']+)["']/gi)]
       .map((match) => safeUrl(match[1], origin))
       .filter(Boolean)
-      .filter((url) => /new|inventory|vehicle|hyundai/i.test(url));
+      .filter((url) => {
+        const path = new URL(url).pathname.toLowerCase();
+        return /new|inventory|vehicle|searchnew/.test(path) && !/sitemap|rss|ajax|thankyou|print-email/.test(path);
+      });
 
     links.forEach((url) => found.add(url));
   }
@@ -561,7 +567,7 @@ function extractVehiclesFromVinBlocks(
   dealer: Dealer,
   criteria: { brand: string; model: string; year: number }
 ) {
-  const text = `${stripHtml(html)} ${decodeHtmlEntities(html.replace(/<[^>]+>/g, " "))}`;
+  const text = stripHtml(html);
   const vinMatches = [...text.matchAll(/\b[A-HJ-NPR-Z0-9]{17}\b/g)];
   const vehicles: Vehicle[] = [];
 
@@ -569,20 +575,22 @@ function extractVehiclesFromVinBlocks(
     const vin = cleanVin(match[0]);
     if (!vin) return;
 
-    const start = Math.max(0, match.index - 1800);
-    const end = Math.min(text.length, match.index + 1800);
+    const start = Math.max(0, match.index - 700);
+    const end = Math.min(text.length, match.index + 700);
     const block = text.slice(start, end);
 
-    if (!matchesCriteria(block, criteria)) return;
+    if (!matchesVehicleBlock(block, criteria)) return;
 
     vehicles.push(buildVehicle(vin, pageUrl, dealer, criteria, {
       trim: guessTrim(block),
       stock_number: guessStock(block),
       msrp: guessPrice(block, ["MSRP", "Retail Price", "Sticker"]),
       sale_price: guessPrice(block, ["Sale Price", "Internet Price", "Dealer Price"]),
+      exterior_color: guessColor(block, ["Exterior", "Exterior Color", "Ext. Color"]),
+      interior_color: guessColor(block, ["Interior", "Interior Color", "Int. Color"]),
       window_sticker_url: guessStickerUrl(html, vin, pageUrl),
       image_url: guessImageUrl(html, vin, pageUrl),
-      raw_data: { source: "html_vin_block" },
+      raw_data: { source: "html_vin_block", confirmed_model_text: block.slice(0, 500) },
     }));
   });
 
@@ -608,6 +616,8 @@ function buildVehicle(
     listing_url: listingUrl,
     window_sticker_url: extra.window_sticker_url || "",
     image_url: extra.image_url || "",
+    exterior_color: extra.exterior_color || "",
+    interior_color: extra.interior_color || "",
     dealer_name: dealer.name,
     dealer_city: dealer.city,
     dealer_state: dealer.state,
@@ -642,6 +652,16 @@ function matchesCriteria(text: string, criteria: { brand: string; model: string;
   return yearOk && brandOk && modelOk;
 }
 
+function matchesVehicleBlock(text: string, criteria: { brand: string; model: string; year: number }) {
+  const haystack = normalizeSearchText(text);
+  const modelWords = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
+  const yearOk = !criteria.year || haystack.includes(String(criteria.year));
+  const modelOk = modelWords.length > 0 && modelWords.every((word) => haystack.includes(word));
+  const vehicleSignal = /\bvin\b|\bstock\b|\bmsrp\b|\bwindow sticker\b|\bexterior\b|\binterior\b/i.test(text);
+
+  return yearOk && modelOk && vehicleSignal;
+}
+
 function guessTrim(text: string) {
   const trims = ["Limited", "Calligraphy", "SEL", "SE", "XRT", "N Line", "Blue", "Ultimate"];
   const found = trims.find((trim) => new RegExp(`\\b${trim.replace(" ", "\\s+")}\\b`, "i").test(text));
@@ -661,6 +681,17 @@ function guessPrice(text: string, labels: string[]) {
   }
 
   return 0;
+}
+
+function guessColor(text: string, labels: string[]) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = text.match(new RegExp(`${escaped}[^A-Za-z0-9]{0,25}([A-Za-z][A-Za-z0-9 /-]{2,40})`, "i"));
+    const color = cleanText(match?.[1] || "").replace(/\bInterior\b|\bExterior\b|\bMSRP\b|\bStock\b.*$/i, "").trim();
+    if (color && color.length <= 40) return color;
+  }
+
+  return "";
 }
 
 function guessStickerUrl(html: string, vin: string, pageUrl: string) {
