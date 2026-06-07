@@ -392,6 +392,8 @@ async function readInventorySearchResponse(response, body) {
         const event = JSON.parse(line);
         if (event.type === "done" || event.event === "done") {
           finalData = event.data || event;
+        } else if (event.type === "error" || event.event === "error") {
+          throw new Error(event.error || event.message || "Backend stream error");
         } else {
           applySearchProgressEvent(event, body);
         }
@@ -400,6 +402,9 @@ async function readInventorySearchResponse(response, body) {
 
     if (buffer.trim()) {
       const event = JSON.parse(buffer);
+      if (event.type === "error" || event.event === "error") {
+        throw new Error(event.error || event.message || "Backend stream error");
+      }
       finalData = event.data || event;
     }
 
