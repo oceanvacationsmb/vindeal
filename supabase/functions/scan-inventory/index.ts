@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-broader-cleaner-inventory-v9";
+const SCANNER_VERSION = "2026-06-07-incentive-detection-v10";
 
 type Dealer = {
   name: string;
@@ -38,6 +38,8 @@ type Vehicle = {
   image_url?: string;
   exterior_color?: string;
   interior_color?: string;
+  manufacturer_rebate?: number;
+  available_rebates?: Array<Record<string, unknown>>;
   dealer_name?: string;
   dealer_city?: string;
   dealer_state?: string;
@@ -481,6 +483,9 @@ async function vehicleFromDetailPageUrl(
       raw_data: { source: "sitemap_detail_page_confirmed" },
     });
     const text = stripHtml(html);
+    const offers = extractManufacturerOffers(text, baseVehicle);
+    const availableRebates = mergeRebates(extracted?.available_rebates, baseVehicle.available_rebates, offers.rows);
+    const manufacturerRebate = extracted?.manufacturer_rebate || baseVehicle.manufacturer_rebate || offers.generalRebate;
 
     return {
       ...baseVehicle,
@@ -497,9 +502,13 @@ async function vehicleFromDetailPageUrl(
       interior_color: extracted?.interior_color || baseVehicle.interior_color || guessColor(text, ["Interior Color", "Interior", "Int. Color"]),
       image_url: extracted?.image_url || baseVehicle.image_url || guessImageUrl(html, baseVehicle.vin, detailUrl),
       window_sticker_url: extracted?.window_sticker_url || baseVehicle.window_sticker_url || guessStickerUrl(html, baseVehicle.vin, detailUrl),
+      manufacturer_rebate: manufacturerRebate,
+      available_rebates: availableRebates,
       raw_data: {
         ...(baseVehicle.raw_data || {}),
         ...(extracted?.raw_data || {}),
+        detected_rebate: manufacturerRebate,
+        available_rebates: availableRebates,
         detail_page_checked: true,
       },
     };
@@ -789,6 +798,7 @@ function extractVehiclesFromVinBlocks(
     const block = text.slice(start, end);
 
     if (!matchesVehicleBlock(block, criteria)) return;
+    const offers = extractManufacturerOffers(block, criteria);
 
     vehicles.push(buildVehicle(vin, pageUrl, dealer, criteria, {
       trim: guessTrim(block),
@@ -799,7 +809,14 @@ function extractVehiclesFromVinBlocks(
       interior_color: guessColor(block, ["Interior", "Interior Color", "Int. Color"]),
       window_sticker_url: guessStickerUrl(html, vin, pageUrl),
       image_url: guessVinImageUrl(html, vin, pageUrl),
-      raw_data: { source: "html_vin_block", confirmed_model_text: block.slice(0, 500) },
+      manufacturer_rebate: offers.generalRebate,
+      available_rebates: offers.rows,
+      raw_data: {
+        source: "html_vin_block",
+        confirmed_model_text: block.slice(0, 500),
+        detected_rebate: offers.generalRebate,
+        available_rebates: offers.rows,
+      },
     }));
   });
 
@@ -827,6 +844,8 @@ function buildVehicle(
     image_url: extra.image_url || "",
     exterior_color: extra.exterior_color || "",
     interior_color: extra.interior_color || "",
+    manufacturer_rebate: extra.manufacturer_rebate || 0,
+    available_rebates: extra.available_rebates || [],
     dealer_name: dealer.name,
     dealer_city: dealer.city,
     dealer_state: dealer.state,
@@ -870,6 +889,85 @@ function matchesVehicleBlock(text: string, criteria: { brand: string; model: str
   const vehicleSignal = /\bvin\b|\bstock\b|\bmsrp\b|\bwindow sticker\b|\bexterior\b|\binterior\b/i.test(text);
 
   return yearOk && brandOk && modelOk && vehicleSignal;
+}
+
+function extractManufacturerOffers(
+  text: string,
+  vehicle: { year?: number; brand?: string; model?: string }
+) {
+  const rows: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  const compactText = cleanText(text);
+  const offerRegex = /((?:[A-Z][A-Za-z/ -]{0,45})?(?:Sales Credit|Cash|Bonus Cash|Customer Cash|College Grad|Loyalty\/Conquest|Loyalty|Conquest|Military|First Responder|APR Offer)[^$]{0,120}\$([0-9][0-9,]{2,})[^.]{0,160})/gi;
+
+  for (const match of compactText.matchAll(offerRegex)) {
+    const phrase = cleanText(match[1]);
+    const amount = pickPrice(match[2]);
+    if (!amount) continue;
+
+    const normalizedPhrase = normalizeSearchText(phrase);
+    if (vehicle.year && !normalizedPhrase.includes(String(vehicle.year))) continue;
+    if (vehicle.brand && !normalizedPhrase.includes(normalizeSearchText(vehicle.brand))) continue;
+    if (vehicle.model) {
+      const modelWords = normalizeSearchText(vehicle.model).split(" ").filter(Boolean);
+      if (modelWords.length && !modelWords.every((word) => normalizedPhrase.includes(word))) continue;
+    }
+
+    const conditional = /college|loyalty|conquest|military|first responder|graduate|student|healthcare|educat/i.test(phrase);
+    const aprOnly = /apr/i.test(phrase) && !/cash|credit|bonus/i.test(phrase);
+    const name = cleanOfferName(phrase);
+    const key = `${normalizeSearchText(name)}:${amount}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    rows.push({
+      rebate_name: name,
+      name,
+      amount,
+      customer_must_qualify: conditional,
+      conditional,
+      verified: false,
+      source: "public_listing_text",
+      detail: phrase,
+    });
+
+    if (aprOnly) continue;
+  }
+
+  const generalRebate = rows
+    .filter((row) => !row.customer_must_qualify)
+    .reduce((max, row) => Math.max(max, Number(row.amount || 0)), 0);
+
+  return { rows, generalRebate };
+}
+
+function cleanOfferName(phrase: string) {
+  const beforeAmount = phrase.split(/\$[0-9][0-9,]{2,}/)[0] || phrase;
+  return cleanText(beforeAmount)
+    .replace(/\boffer\b.*$/i, "Offer")
+    .replace(/\bon select\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim() || "Manufacturer incentive";
+}
+
+function mergeRebates(...groups: unknown[]) {
+  const rows: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+
+  groups.flat().forEach((row) => {
+    if (!row || typeof row !== "object") return;
+    const item = row as Record<string, unknown>;
+    const amount = Number(item.amount || 0);
+    const name = cleanText(item.rebate_name || item.name || "Manufacturer incentive");
+    if (!amount || !name) return;
+
+    const key = `${normalizeSearchText(name)}:${amount}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({ ...item, rebate_name: name, name, amount });
+  });
+
+  return rows;
 }
 
 function guessTrim(text: string) {
