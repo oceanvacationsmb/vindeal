@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-oem-rebate-separation-v11";
+const SCANNER_VERSION = "2026-06-07-safe-listing-links-v12";
 
 type Dealer = {
   name: string;
@@ -804,7 +804,9 @@ function extractVehiclesFromVinBlocks(
     if (!matchesVehicleBlock(block, criteria)) return;
     const offers = extractManufacturerOffers(block, criteria);
 
-    vehicles.push(buildVehicle(vin, pageUrl, dealer, criteria, {
+    const vehicleDetailUrl = guessVehicleDetailUrl(html, vin, pageUrl);
+
+    vehicles.push(buildVehicle(vin, vehicleDetailUrl, dealer, criteria, {
       trim: guessTrim(block),
       stock_number: guessStock(block),
       msrp: guessPrice(block, ["MSRP", "Retail Price", "Sticker"]),
@@ -818,6 +820,7 @@ function extractVehiclesFromVinBlocks(
       dealer_detected_offers: offers.rows,
       raw_data: {
         source: "html_vin_block",
+        fallback_inventory_url: pageUrl,
         confirmed_model_text: block.slice(0, 500),
         detected_rebate: 0,
         available_rebates: [],
@@ -1031,6 +1034,14 @@ function guessStickerUrl(html: string, vin: string, pageUrl: string) {
   const match = html.match(new RegExp(`href=["']([^"']*(?:sticker|window)[^"']*${vin}[^"']*)["']`, "i")) ||
     html.match(new RegExp(`href=["']([^"']*${vin}[^"']*(?:sticker|window)[^"']*)["']`, "i"));
   return match ? safeUrl(match[1], pageUrl) : "";
+}
+
+function guessVehicleDetailUrl(html: string, vin: string, pageUrl: string) {
+  const vinHref = html.match(new RegExp(`href=["']([^"']*${vin}[^"']*)["']`, "i"));
+  const url = safeUrl(vinHref?.[1] || "", pageUrl);
+  if (url && !/sticker|window|print|email|share/i.test(url)) return url;
+
+  return "";
 }
 
 function guessImageUrl(html: string, vin: string, pageUrl: string) {

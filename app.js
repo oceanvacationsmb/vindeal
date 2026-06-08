@@ -16,6 +16,7 @@ let compareVins = new Set();
 let lastSearchBody = null;
 let resultSort = "closest";
 let lastDealersInRadius = [];
+let currentSearchUiState = "idle";
 let activeResultFilters = {
   dealer: new Set(),
   trim: new Set(),
@@ -280,6 +281,7 @@ function setResultsSource(text) {
 }
 
 function setSearchUiState(state) {
+  currentSearchUiState = state;
   const isIdle = state === "idle";
   const isLoading = state === "loading";
   const isResults = state === "results";
@@ -288,6 +290,7 @@ function setSearchUiState(state) {
   document.getElementById("loadingPanel")?.classList.toggle("hidden", !isLoading);
   document.getElementById("searchSummary")?.classList.toggle("hidden", !isResults);
   document.getElementById("resultsHead")?.classList.toggle("hidden", !isResults);
+  document.getElementById("dealerCoverage")?.classList.add("hidden");
 }
 
 function setSearchProgress(percent, title, text) {
@@ -352,7 +355,6 @@ function upsertLiveDealer(dealer) {
 
   lastDealersInRadius.sort((a, b) => number(a.distance_miles) - number(b.distance_miles));
   document.getElementById("dealerCount").textContent = lastDealersInRadius.length;
-  renderDealerCoverage(lastSearchBody);
 }
 
 function appendLiveVehicles(list = []) {
@@ -390,7 +392,7 @@ function applySearchProgressEvent(event = {}, body = lastSearchBody) {
     addSearchProgressLog(percentDone || 0, event.title || "Search update", event.message || event.detail || "");
   }
 
-  if (body && lastDealersInRadius.length) renderDealerCoverage(body);
+  if (body && lastDealersInRadius.length && !vehicles.length && currentSearchUiState !== "loading") renderDealerCoverage(body);
 }
 
 async function readInventorySearchResponse(response, body) {
@@ -1376,6 +1378,12 @@ function renderDealerCoverage(body) {
   const box = document.getElementById("dealerCoverage");
   if (!box) return;
 
+  if (currentSearchUiState === "loading") {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
   const dealers = lastDealersInRadius;
   if (vehicles.length) {
     box.classList.add("hidden");
@@ -1755,7 +1763,7 @@ function renderVehicleCard(v) {
               ? incentiveRows
                   .map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`)
                   .join("")
-              : `<span>No manufacturer incentives available for this car.</span>`
+              : `<span>No verified OEM incentive loaded for this car yet.</span>`
           }
         </div>
 
@@ -1770,7 +1778,7 @@ function renderVehicleCard(v) {
         }
 
         <div class="action-row">
-          ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">Dealer Listing</a>` : ""}
+          ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">Dealer Listing</a>` : `<button disabled>Exact Listing N/A</button>`}
           ${
             stickerUrl
               ? `<a href="${stickerUrl}" target="_blank" rel="noopener">Window Sticker PDF</a>`
