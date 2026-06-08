@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-hybrid-inventory-fallback-v7";
+const SCANNER_VERSION = "2026-06-07-any-model-scan-v8";
 
 type Dealer = {
   name: string;
@@ -124,8 +124,8 @@ async function runSearch(body: SearchBody, emit: (event: Record<string, unknown>
 
   const zipCode = String(body.zipCode || "").trim();
   const radius = clamp(Number(body.radius || 50), 1, 1000);
-  const brand = cleanText(body.brand || "Hyundai");
-  const model = cleanText(body.model || "");
+  const brand = normalizeCriteriaValue(body.brand || "Hyundai");
+  const model = normalizeCriteriaValue(body.model || "");
   const year = Number(body.year || 0);
 
   emit({
@@ -552,8 +552,10 @@ function vehicleInfoFromDetailUrl(
     .filter(Boolean);
   const newIndex = parts.findIndex((part) => sameText(part, "new"));
   const yearIndex = parts.findIndex((part) => /^\d{4}$/.test(part));
-  const firstBrandIndex = parts.findIndex((part) => sameText(part, criteria.brand));
-  const brandAfterYearIndex = parts.findIndex((part, index) => index > yearIndex && sameText(part, criteria.brand));
+  const firstBrandIndex = criteria.brand ? parts.findIndex((part) => sameText(part, criteria.brand)) : yearIndex;
+  const brandAfterYearIndex = criteria.brand
+    ? parts.findIndex((part, index) => index > yearIndex && sameText(part, criteria.brand))
+    : -1;
   const brandIndex = brandAfterYearIndex >= 0 ? brandAfterYearIndex : firstBrandIndex;
 
   if (newIndex < 0 || yearIndex < newIndex || brandIndex < newIndex) return null;
@@ -563,13 +565,20 @@ function vehicleInfoFromDetailUrl(
   const modelParts = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
   const afterBrand = parts.slice(brandIndex + 1, Math.max(parts.length - 1, brandIndex + 1));
   const normalizedAfterBrand = normalizeSearchText(afterBrand.join(" "));
-  if (!modelParts.length || !modelParts.every((part) => normalizedAfterBrand.includes(part))) return null;
+  if (modelParts.length && !modelParts.every((part) => normalizedAfterBrand.includes(part))) return null;
 
-  const modelEnd = findModelEndIndex(afterBrand, modelParts);
+  const modelEnd = modelParts.length ? findModelEndIndex(afterBrand, modelParts) : guessModelEndIndex(afterBrand);
   const actualModel = cleanText(afterBrand.slice(0, modelEnd).join(" "));
   const trim = cleanText(afterBrand.slice(modelEnd).join(" ")) || "Verify";
 
   return { vin, actualYear, actualModel, trim };
+}
+
+function guessModelEndIndex(parts: string[]) {
+  if (!parts.length) return 0;
+  const secondWordModels = new Set(["ioniq", "santa", "elantra", "sonata", "tucson", "palisade", "kona"]);
+  const first = normalizeSearchText(parts[0]);
+  return secondWordModels.has(first) && parts.length > 1 ? 2 : 1;
 }
 
 function findModelEndIndex(parts: string[], modelWords: string[]) {
@@ -604,19 +613,24 @@ async function discoverInventoryPages(
     "/new-vehicles/",
     "/new/",
     "/inventory/new/",
-    `/inventory/new/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
-    `/inventory/new/${brandSlug}-${modelSlug}.htm`,
-    `/inventory/all/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
-    `/inventory/all/${brandSlug}-${modelSlug}.htm`,
     `/new-${brandSlug}/`,
     `/new-${brandSlug}-inventory/`,
     `/new/${brandSlug}/`,
-    `/new/${brandSlug}/${modelSlug}/`,
-    `/inventory/new/${brandSlug}/${modelSlug}/`,
-    `/new-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}&model=${encodeURIComponent(criteria.model)}`,
-    `/new-inventory/index.htm?model=${encodeURIComponent(criteria.model)}`,
     `/all-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}`,
   ];
+
+  if (modelSlug) {
+    fixed.push(
+      `/inventory/new/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
+      `/inventory/new/${brandSlug}-${modelSlug}.htm`,
+      `/inventory/all/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
+      `/inventory/all/${brandSlug}-${modelSlug}.htm`,
+      `/new/${brandSlug}/${modelSlug}/`,
+      `/inventory/new/${brandSlug}/${modelSlug}/`,
+      `/new-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}&model=${encodeURIComponent(criteria.model)}`,
+      `/new-inventory/index.htm?model=${encodeURIComponent(criteria.model)}`
+    );
+  }
 
   const found = new Set<string>();
 
@@ -852,7 +866,7 @@ function matchesVehicleBlock(text: string, criteria: { brand: string; model: str
   const modelWords = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
   const yearOk = !criteria.year || haystack.includes(String(criteria.year));
   const brandOk = !criteria.brand || haystack.includes(normalizeSearchText(criteria.brand));
-  const modelOk = modelWords.length > 0 && modelWords.every((word) => haystack.includes(word));
+  const modelOk = !modelWords.length || modelWords.every((word) => haystack.includes(word));
   const vehicleSignal = /\bvin\b|\bstock\b|\bmsrp\b|\bwindow sticker\b|\bexterior\b|\binterior\b/i.test(text);
 
   return yearOk && brandOk && modelOk && vehicleSignal;
@@ -938,6 +952,11 @@ function cleanText(value: unknown) {
 
 function normalizeSearchText(value: unknown) {
   return cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizeCriteriaValue(value: unknown) {
+  const text = cleanText(value);
+  return /^(any|all|all models|all makes)$/i.test(text) ? "" : text;
 }
 
 function sameText(a: unknown, b: unknown) {

@@ -270,6 +270,10 @@ function sameText(a, b) {
   return normalizeText(a) === normalizeText(b);
 }
 
+function isAnyValue(value) {
+  return ["", "any", "all", "all models", "all makes"].includes(normalizeText(value));
+}
+
 function setResultsSource(text) {
   const el = document.getElementById("resultsSource");
   if (el) el.textContent = text || "";
@@ -893,10 +897,11 @@ function cachedVehicleMatches(v, body) {
   const distance = Number(v.dealer_distance_miles || 0);
   const trimOk = body.trim === "Any" || sameText(v.trim, body.trim);
   const radiusOk = !distance || distance <= Number(body.radius || 0);
+  const modelOk = isAnyValue(body.model) || sameText(v.model, body.model);
 
   return (
     sameText(v.brand, body.brand) &&
-    sameText(v.model, body.model) &&
+    modelOk &&
     Number(v.year) === Number(body.year) &&
     trimOk &&
     radiusOk
@@ -952,7 +957,7 @@ function updateModelOptions() {
   const brand = document.getElementById("brand").value;
   const modelSelect = document.getElementById("model");
 
-  modelSelect.innerHTML = "";
+  modelSelect.innerHTML = `<option value="Any">All models</option>`;
 
   unique(catalog.filter((x) => x.brand === brand).map((x) => x.model)).forEach((model) => {
     modelSelect.innerHTML += `<option value="${model}">${model}</option>`;
@@ -966,7 +971,12 @@ function updateTrimOptions() {
   const model = document.getElementById("model").value;
   const trimSelect = document.getElementById("trim");
 
-  trimSelect.innerHTML = "";
+  trimSelect.innerHTML = `<option value="Any">Any</option>`;
+  if (isAnyValue(model)) {
+    updateYearOptions();
+    refreshModelFilters();
+    return;
+  }
 
   unique(
     catalog
@@ -989,7 +999,7 @@ function updateYearOptions() {
 
   unique(
     catalog
-      .filter((x) => x.brand === brand && x.model === model)
+      .filter((x) => x.brand === brand && (isAnyValue(model) || x.model === model))
       .map((x) => x.year)
   )
     .sort((a, b) => b - a)
@@ -1069,6 +1079,7 @@ function loadColorOptions() {
       .filter(
         (x) =>
           x.brand === brand &&
+          !isAnyValue(model) &&
           x.model === model &&
           Number(x.year) === year &&
           x.color_type === "exterior" &&
@@ -1082,6 +1093,7 @@ function loadColorOptions() {
       .filter(
         (x) =>
           x.brand === brand &&
+          !isAnyValue(model) &&
           x.model === model &&
           Number(x.year) === year &&
           x.color_type === "interior" &&
@@ -1178,6 +1190,14 @@ async function loadProgramsForSelectedCar() {
   const year = Number(document.getElementById("year")?.value || 2026);
   const term = Number(document.getElementById("term")?.value || 36);
   const miles = Number(document.getElementById("miles")?.value || 10000);
+
+  if (isAnyValue(model)) {
+    rebatesCatalog = [];
+    leaseProgramPreview = null;
+    renderRebateOptions();
+    renderProgramPreview();
+    return;
+  }
 
   rebatesCatalog = await supabaseGet(
     `manufacturer_rebate_programs?select=*&active=eq.true&brand=eq.${encodeURIComponent(brand)}&model=eq.${encodeURIComponent(model)}&year=eq.${year}&order=amount.desc`
@@ -1400,7 +1420,8 @@ async function scanBackendInventory() {
   addSearchProgressLog(10, "Finding dealers", `${body.brand} dealers near ${body.zipCode}.`);
 
   try {
-    setSearchProgress(35, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${body.model}.`);
+    const modelText = isAnyValue(body.model) ? "all models" : body.model;
+    setSearchProgress(35, "Searching inventory", `Checking dealer inventory for ${body.year} ${body.brand} ${modelText}.`);
     addSearchProgressLog(35, "Searching inventory", "Waiting for backend dealer scanner.");
     const response = await fetch(SCAN_INVENTORY_URL, {
       method: "POST",
