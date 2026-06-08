@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-any-model-scan-v8";
+const SCANNER_VERSION = "2026-06-07-broader-cleaner-inventory-v9";
 
 type Dealer = {
   name: string;
@@ -55,12 +55,12 @@ const corsHeaders = {
 };
 
 const USER_AGENT = "VINDealBot/0.1 (+https://oceanvacationsmb.github.io/vindeal/; public inventory transparency)";
-const MAX_DEALERS_TO_SCAN = 12;
-const MAX_PAGES_PER_DEALER = 10;
+const MAX_DEALERS_TO_SCAN = 24;
+const MAX_PAGES_PER_DEALER = 5;
 const MAX_HTML_CHARS = 900_000;
 const MAX_SITEMAP_VEHICLES_PER_DEALER = 60;
-const MAX_DETAIL_PAGES_PER_DEALER = 12;
-const MAX_FALLBACK_VEHICLES_PER_DEALER = 20;
+const MAX_DETAIL_PAGES_PER_DEALER = 8;
+const MAX_FALLBACK_VEHICLES_PER_DEALER = 12;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -798,7 +798,7 @@ function extractVehiclesFromVinBlocks(
       exterior_color: guessColor(block, ["Exterior", "Exterior Color", "Ext. Color"]),
       interior_color: guessColor(block, ["Interior", "Interior Color", "Int. Color"]),
       window_sticker_url: guessStickerUrl(html, vin, pageUrl),
-      image_url: guessImageUrl(html, vin, pageUrl),
+      image_url: guessVinImageUrl(html, vin, pageUrl),
       raw_data: { source: "html_vin_block", confirmed_model_text: block.slice(0, 500) },
     }));
   });
@@ -896,12 +896,30 @@ function guessPrice(text: string, labels: string[]) {
 function guessColor(text: string, labels: string[]) {
   for (const label of labels) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const match = text.match(new RegExp(`${escaped}[^A-Za-z0-9]{0,25}([A-Za-z][A-Za-z0-9 /-]{2,40})`, "i"));
-    const color = cleanText(match?.[1] || "").replace(/\bInterior\b|\bExterior\b|\bMSRP\b|\bStock\b.*$/i, "").trim();
+    const match = text.match(new RegExp(`${escaped}[^A-Za-z0-9]{0,25}([A-Za-z][A-Za-z0-9 /-]{2,80})`, "i"));
+    const color = cleanColor(match?.[1] || "");
     if (color && color.length <= 40) return color;
   }
 
   return "";
+}
+
+function cleanColor(value: unknown) {
+  let color = cleanText(value)
+    .replace(/\bInterior\b|\bExterior\b|\bMSRP\b|\bStock\b.*$/i, "")
+    .replace(/\bColor\b[\s:,-]*/i, " ")
+    .replace(/\bBody\/Seat(?:ing)?\b.*$/i, "")
+    .replace(/\bBody\b.*$/i, "")
+    .replace(/\bSeat(?:ing)?\b.*$/i, "")
+    .replace(/\bSport Utility\b.*$/i, "")
+    .replace(/\b\d+\s*seats?\b.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const colorColorIndex = color.search(/\sColor\s/i);
+  if (colorColorIndex > 0) color = color.slice(0, colorColorIndex).trim();
+
+  return color;
 }
 
 function guessStickerUrl(html: string, vin: string, pageUrl: string) {
@@ -911,8 +929,31 @@ function guessStickerUrl(html: string, vin: string, pageUrl: string) {
 }
 
 function guessImageUrl(html: string, vin: string, pageUrl: string) {
-  const match = html.match(new RegExp(`(?:src|data-src)=["']([^"']*${vin}[^"']*\\.(?:jpg|jpeg|png|webp)[^"']*)["']`, "i"));
-  return match ? safeUrl(match[1], pageUrl) : "";
+  const vinImage = guessVinImageUrl(html, vin, pageUrl);
+  if (vinImage) return vinImage;
+
+  const metaMatch =
+    html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+  const metaUrl = safeImageUrl(metaMatch?.[1] || "", pageUrl);
+  if (metaUrl) return metaUrl;
+
+  const imageMatch = html.match(/(?:src|data-src|data-lazy-src)=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i);
+  return safeImageUrl(imageMatch?.[1] || "", pageUrl);
+}
+
+function guessVinImageUrl(html: string, vin: string, pageUrl: string) {
+  const vinMatch = html.match(new RegExp(`(?:src|data-src|data-lazy-src)=["']([^"']*${vin}[^"']*\\.(?:jpg|jpeg|png|webp)[^"']*)["']`, "i"));
+  return safeImageUrl(vinMatch?.[1] || "", pageUrl);
+}
+
+function safeImageUrl(value: string, pageUrl: string) {
+  const url = safeUrl(decodeHtmlEntities(value || ""), pageUrl);
+  if (!url) return "";
+
+  const lowered = url.toLowerCase();
+  if (/logo|sprite|icon|placeholder|no-photo|blank|transparent|favicon/.test(lowered)) return "";
+  return url;
 }
 
 function uniqueVehiclesByVin(list: Vehicle[]) {

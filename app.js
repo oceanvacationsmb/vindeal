@@ -1336,6 +1336,12 @@ function renderDealerCoverage(body) {
   if (!box) return;
 
   const dealers = lastDealersInRadius;
+  if (vehicles.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+
   const carsByDealer = vehicles.reduce((acc, v) => {
     const key = normalizeText(v.dealer_name || "Dealer");
     acc[key] = (acc[key] || 0) + 1;
@@ -1598,7 +1604,7 @@ function renderVehicleCard(v) {
       <div class="image-box">
         ${
           v.image_url
-            ? `<img src="${v.image_url}" alt="vehicle" />`
+            ? `<img src="${escapeAttr(v.image_url)}" alt="vehicle" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'), { className: 'no-image', textContent: 'No Image' }))" />`
             : `<div class="no-image">No Image</div>`
         }
 
