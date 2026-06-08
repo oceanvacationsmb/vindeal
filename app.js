@@ -618,7 +618,7 @@ function vehicleIncentiveRows(v) {
     rows.push({ name, amount: numericAmount, detail });
   };
 
-  addRow("Manufacturer incentive applied", v.manufacturer_rebate || raw.detected_rebate, "Included in the public estimate.");
+  addRow("OEM incentive applied", v.manufacturer_rebate, "Included in the public estimate when sourced from manufacturer/program data.");
 
   rebatesCatalog
     .filter((r) => sameText(r.brand, v.brand) && sameText(r.model, v.model) && Number(r.year) === Number(v.year))
@@ -636,6 +636,27 @@ function vehicleIncentiveRows(v) {
       r.amount,
       `${r.customer_must_qualify ? "Must qualify. " : ""}${r.verified ? "Verified." : "Dealer/OEM verification needed."}`
     );
+  });
+
+  return rows;
+}
+
+function dealerOfferRows(v) {
+  const raw = v.raw_data || {};
+  const rows = [];
+  const seen = new Set();
+
+  (v.dealer_detected_offers || raw.dealer_detected_offers || []).forEach((r) => {
+    const amount = number(r.amount);
+    const name = r.rebate_name || r.name || "Dealer/listing offer";
+    const key = `${normalizeText(name)}:${amount}`;
+    if (!amount || seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      name,
+      amount,
+      detail: r.detail || "Detected on dealer/listing page. Not applied as manufacturer rebate.",
+    });
   });
 
   return rows;
@@ -1609,6 +1630,7 @@ function renderVehicleCard(v) {
   const taxEstimate = calculateTax(quote.totalPayments || basePayment * quote.term || quote.adjustedCapCost, registrationState);
   const dealerAddons = detectDealerAddons(v);
   const incentiveRows = vehicleIncentiveRows(v);
+  const dealerOffers = dealerOfferRows(v);
   const rebateBadge = rebateStrength(v, quote);
   const docFeeHigh = Number(v.doc_fee || 0) >= 700;
   const isFavorite = favoriteVins.has(v.vin);
@@ -1736,6 +1758,16 @@ function renderVehicleCard(v) {
               : `<span>No manufacturer incentives available for this car.</span>`
           }
         </div>
+
+        ${
+          dealerOffers.length
+            ? `<div class="rebate-list dealer-offers">
+                <b>Dealer / Listing Offers Detected</b>
+                <span>Shown separately from manufacturer rebates. These are not applied to the lease estimate until verified by the dealer or OEM source.</span>
+                ${dealerOffers.map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`).join("")}
+              </div>`
+            : ""
+        }
 
         <div class="action-row">
           ${v.listing_url ? `<a href="${v.listing_url}" target="_blank">Dealer Listing</a>` : ""}

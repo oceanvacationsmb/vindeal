@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-incentive-detection-v10";
+const SCANNER_VERSION = "2026-06-07-oem-rebate-separation-v11";
 
 type Dealer = {
   name: string;
@@ -40,6 +40,7 @@ type Vehicle = {
   interior_color?: string;
   manufacturer_rebate?: number;
   available_rebates?: Array<Record<string, unknown>>;
+  dealer_detected_offers?: Array<Record<string, unknown>>;
   dealer_name?: string;
   dealer_city?: string;
   dealer_state?: string;
@@ -484,8 +485,9 @@ async function vehicleFromDetailPageUrl(
     });
     const text = stripHtml(html);
     const offers = extractManufacturerOffers(text, baseVehicle);
-    const availableRebates = mergeRebates(extracted?.available_rebates, baseVehicle.available_rebates, offers.rows);
-    const manufacturerRebate = extracted?.manufacturer_rebate || baseVehicle.manufacturer_rebate || offers.generalRebate;
+    const availableRebates = mergeRebates(extracted?.available_rebates, baseVehicle.available_rebates);
+    const dealerDetectedOffers = mergeRebates(extracted?.dealer_detected_offers, baseVehicle.dealer_detected_offers, offers.rows);
+    const manufacturerRebate = extracted?.manufacturer_rebate || baseVehicle.manufacturer_rebate || 0;
 
     return {
       ...baseVehicle,
@@ -504,11 +506,13 @@ async function vehicleFromDetailPageUrl(
       window_sticker_url: extracted?.window_sticker_url || baseVehicle.window_sticker_url || guessStickerUrl(html, baseVehicle.vin, detailUrl),
       manufacturer_rebate: manufacturerRebate,
       available_rebates: availableRebates,
+      dealer_detected_offers: dealerDetectedOffers,
       raw_data: {
         ...(baseVehicle.raw_data || {}),
         ...(extracted?.raw_data || {}),
-        detected_rebate: manufacturerRebate,
+        detected_rebate: 0,
         available_rebates: availableRebates,
+        dealer_detected_offers: dealerDetectedOffers,
         detail_page_checked: true,
       },
     };
@@ -809,13 +813,15 @@ function extractVehiclesFromVinBlocks(
       interior_color: guessColor(block, ["Interior", "Interior Color", "Int. Color"]),
       window_sticker_url: guessStickerUrl(html, vin, pageUrl),
       image_url: guessVinImageUrl(html, vin, pageUrl),
-      manufacturer_rebate: offers.generalRebate,
-      available_rebates: offers.rows,
+      manufacturer_rebate: 0,
+      available_rebates: [],
+      dealer_detected_offers: offers.rows,
       raw_data: {
         source: "html_vin_block",
         confirmed_model_text: block.slice(0, 500),
-        detected_rebate: offers.generalRebate,
-        available_rebates: offers.rows,
+        detected_rebate: 0,
+        available_rebates: [],
+        dealer_detected_offers: offers.rows,
       },
     }));
   });
@@ -846,6 +852,7 @@ function buildVehicle(
     interior_color: extra.interior_color || "",
     manufacturer_rebate: extra.manufacturer_rebate || 0,
     available_rebates: extra.available_rebates || [],
+    dealer_detected_offers: extra.dealer_detected_offers || [],
     dealer_name: dealer.name,
     dealer_city: dealer.city,
     dealer_state: dealer.state,
