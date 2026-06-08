@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-confirmed-sitemap-only-v5";
+const SCANNER_VERSION = "2026-06-07-confirmed-detail-page-v6";
 
 type Dealer = {
   name: string;
@@ -59,7 +59,7 @@ const MAX_DEALERS_TO_SCAN = 12;
 const MAX_PAGES_PER_DEALER = 10;
 const MAX_HTML_CHARS = 900_000;
 const MAX_SITEMAP_VEHICLES_PER_DEALER = 60;
-const MAX_DETAIL_PAGES_PER_DEALER = 8;
+const MAX_DETAIL_PAGES_PER_DEALER = 12;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -403,49 +403,63 @@ async function scanDealerSitemapInventory(
     .map((url) => safeUrl(url, origin))
     .filter(Boolean);
 
-  const vehicles = locs
-    .map((url) => vehicleFromDetailUrl(url, dealer, criteria))
-    .filter(Boolean)
-    .slice(0, MAX_SITEMAP_VEHICLES_PER_DEALER) as Vehicle[];
+  const candidateUrls = locs
+    .filter((url) => vehicleInfoFromDetailUrl(url, criteria))
+    .slice(0, MAX_SITEMAP_VEHICLES_PER_DEALER);
 
   const enriched: Vehicle[] = [];
-  for (const vehicle of vehicles.slice(0, MAX_DETAIL_PAGES_PER_DEALER)) {
-    enriched.push(await enrichVehicleFromDetailPage(vehicle, dealer, criteria));
+  for (const url of candidateUrls.slice(0, MAX_DETAIL_PAGES_PER_DEALER)) {
+    const vehicle = await vehicleFromDetailPageUrl(url, dealer, criteria);
+    if (vehicle) enriched.push(vehicle);
   }
 
-  return uniqueVehiclesByVin([...enriched, ...vehicles.slice(MAX_DETAIL_PAGES_PER_DEALER)]);
+  const urlOnlyVehicles = candidateUrls
+    .slice(MAX_DETAIL_PAGES_PER_DEALER)
+    .map((url) => vehicleFromDetailUrl(url, dealer, criteria))
+    .filter(Boolean) as Vehicle[];
+
+  return uniqueVehiclesByVin([...enriched, ...urlOnlyVehicles]);
 }
 
-async function enrichVehicleFromDetailPage(
-  vehicle: Vehicle,
+async function vehicleFromDetailPageUrl(
+  detailUrl: string,
   dealer: Dealer,
   criteria: { brand: string; model: string; year: number }
 ) {
-  const detailUrl = vehicle.listing_url || "";
+  const vehicle = vehicleFromDetailUrl(detailUrl, dealer, criteria);
   if (!detailUrl || !(await isAllowedByRobots(detailUrl))) return vehicle;
 
   try {
     const html = await fetchHtml(detailUrl);
-    const extracted = extractVehiclesFromHtml(html, detailUrl, dealer, criteria).find((item) => item.vin === vehicle.vin);
+    const extractedVehicles = extractVehiclesFromHtml(html, detailUrl, dealer, criteria);
+    const extracted = vehicle?.vin
+      ? extractedVehicles.find((item) => item.vin === vehicle.vin) || extractedVehicles[0]
+      : extractedVehicles[0];
+    if (!vehicle && !extracted?.vin) return null;
+
+    const baseVehicle = vehicle || buildVehicle(extracted.vin, detailUrl, dealer, criteriaFromUrl(detailUrl, criteria), {
+      trim: extracted.trim,
+      raw_data: { source: "sitemap_detail_page_confirmed" },
+    });
     const text = stripHtml(html);
 
     return {
-      ...vehicle,
+      ...baseVehicle,
       ...(extracted || {}),
-      vin: vehicle.vin,
-      year: vehicle.year,
-      brand: vehicle.brand,
-      model: vehicle.model,
+      vin: baseVehicle.vin,
+      year: baseVehicle.year,
+      brand: baseVehicle.brand,
+      model: baseVehicle.model,
       listing_url: detailUrl,
-      trim: extracted?.trim && extracted.trim !== "Verify" ? extracted.trim : vehicle.trim,
-      msrp: extracted?.msrp || vehicle.msrp || guessPrice(text, ["MSRP", "Retail Price", "Sticker"]),
-      sale_price: extracted?.sale_price || vehicle.sale_price || guessPrice(text, ["Sale Price", "Internet Price", "Dealer Price", "Price"]),
-      exterior_color: extracted?.exterior_color || vehicle.exterior_color || guessColor(text, ["Exterior Color", "Exterior", "Ext. Color"]),
-      interior_color: extracted?.interior_color || vehicle.interior_color || guessColor(text, ["Interior Color", "Interior", "Int. Color"]),
-      image_url: extracted?.image_url || vehicle.image_url || guessImageUrl(html, vehicle.vin, detailUrl),
-      window_sticker_url: extracted?.window_sticker_url || vehicle.window_sticker_url || guessStickerUrl(html, vehicle.vin, detailUrl),
+      trim: extracted?.trim && extracted.trim !== "Verify" ? extracted.trim : baseVehicle.trim,
+      msrp: extracted?.msrp || baseVehicle.msrp || guessPrice(text, ["MSRP", "Retail Price", "Sticker"]),
+      sale_price: extracted?.sale_price || baseVehicle.sale_price || guessPrice(text, ["Sale Price", "Internet Price", "Dealer Price", "Price"]),
+      exterior_color: extracted?.exterior_color || baseVehicle.exterior_color || guessColor(text, ["Exterior Color", "Exterior", "Ext. Color"]),
+      interior_color: extracted?.interior_color || baseVehicle.interior_color || guessColor(text, ["Interior Color", "Interior", "Int. Color"]),
+      image_url: extracted?.image_url || baseVehicle.image_url || guessImageUrl(html, baseVehicle.vin, detailUrl),
+      window_sticker_url: extracted?.window_sticker_url || baseVehicle.window_sticker_url || guessStickerUrl(html, baseVehicle.vin, detailUrl),
       raw_data: {
-        ...(vehicle.raw_data || {}),
+        ...(baseVehicle.raw_data || {}),
         ...(extracted?.raw_data || {}),
         detail_page_checked: true,
       },
@@ -461,9 +475,35 @@ function vehicleFromDetailUrl(
   dealer: Dealer,
   criteria: { brand: string; model: string; year: number }
 ) {
+  const info = vehicleInfoFromDetailUrl(url, criteria);
+  if (!info?.vin) return null;
+
+  return buildVehicle(info.vin, url, dealer, {
+    brand: criteria.brand,
+    model: info.actualModel || criteria.model,
+    year: info.actualYear,
+  }, {
+    trim: info.trim,
+    stock_number: "",
+    raw_data: { source: "sitemap_vehicle_detail_url" },
+  });
+}
+
+function criteriaFromUrl(url: string, criteria: { brand: string; model: string; year: number }) {
+  const info = vehicleInfoFromDetailUrl(url, criteria);
+  return {
+    brand: criteria.brand,
+    model: info?.actualModel || criteria.model,
+    year: info?.actualYear || criteria.year,
+  };
+}
+
+function vehicleInfoFromDetailUrl(
+  url: string,
+  criteria: { brand: string; model: string; year: number }
+) {
   const decodedUrl = decodeHtmlEntities(safeDecodeURIComponent(url.replace(/\+/g, " ")));
   const vin = cleanVin(decodedUrl.match(/([A-HJ-NPR-Z0-9]{17})(?:$|[/?#])/i)?.[1] || "");
-  if (!vin) return null;
 
   const path = new URL(url).pathname.replace(/^\/+/, "");
   const decodedPath = decodeHtmlEntities(safeDecodeURIComponent(path.replace(/\+/g, " ")));
@@ -473,7 +513,9 @@ function vehicleFromDetailUrl(
     .filter(Boolean);
   const newIndex = parts.findIndex((part) => sameText(part, "new"));
   const yearIndex = parts.findIndex((part) => /^\d{4}$/.test(part));
-  const brandIndex = parts.findIndex((part) => sameText(part, criteria.brand));
+  const firstBrandIndex = parts.findIndex((part) => sameText(part, criteria.brand));
+  const brandAfterYearIndex = parts.findIndex((part, index) => index > yearIndex && sameText(part, criteria.brand));
+  const brandIndex = brandAfterYearIndex >= 0 ? brandAfterYearIndex : firstBrandIndex;
 
   if (newIndex < 0 || yearIndex < newIndex || brandIndex < newIndex) return null;
   const actualYear = Number(parts[yearIndex]);
@@ -488,15 +530,7 @@ function vehicleFromDetailUrl(
   const actualModel = cleanText(afterBrand.slice(0, modelEnd).join(" "));
   const trim = cleanText(afterBrand.slice(modelEnd).join(" ")) || "Verify";
 
-  return buildVehicle(vin, url, dealer, {
-    brand: criteria.brand,
-    model: actualModel || criteria.model,
-    year: actualYear,
-  }, {
-    trim,
-    stock_number: "",
-    raw_data: { source: "sitemap_vehicle_detail_url" },
-  });
+  return { vin, actualYear, actualModel, trim };
 }
 
 function findModelEndIndex(parts: string[], modelWords: string[]) {
