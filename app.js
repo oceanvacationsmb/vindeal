@@ -867,7 +867,7 @@ async function loadDealers() {
 function normalizeCachedVehicle(v) {
   const raw = v.raw_data || {};
   const listingUrl = v.listing_url || raw.card_json?.VehicleCard?.VehicleDetailUrl || "";
-  const rawImageUrl = v.image_url || raw.card_json?.VehicleCard?.VehicleImageModel?.VehiclePhotoSrc || "";
+  const rawImageUrl = pickImageUrl(v.image_url || raw.card_json?.VehicleCard?.VehicleImageModel?.VehiclePhotoSrc || "");
   let imageUrl = rawImageUrl;
 
   if (rawImageUrl && rawImageUrl.startsWith("/") && listingUrl) {
@@ -891,6 +891,26 @@ function normalizeCachedVehicle(v) {
 
   normalized.window_sticker_url = normalizeStickerUrl(normalized);
   return normalized;
+}
+
+function pickImageUrl(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return pickImageUrl(value.find(Boolean));
+
+  if (typeof value === "object") {
+    return pickImageUrl(
+      value.url ||
+        value.src ||
+        value.href ||
+        value.VehiclePhotoSrc ||
+        value.photo ||
+        value.image ||
+        value[0]
+    );
+  }
+
+  return "";
 }
 
 function cachedVehicleMatches(v, body) {
