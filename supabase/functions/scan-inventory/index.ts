@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-confirmed-detail-page-v6";
+const SCANNER_VERSION = "2026-06-07-hybrid-inventory-fallback-v7";
 
 type Dealer = {
   name: string;
@@ -60,6 +60,7 @@ const MAX_PAGES_PER_DEALER = 10;
 const MAX_HTML_CHARS = 900_000;
 const MAX_SITEMAP_VEHICLES_PER_DEALER = 60;
 const MAX_DETAIL_PAGES_PER_DEALER = 12;
+const MAX_FALLBACK_VEHICLES_PER_DEALER = 20;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -384,7 +385,45 @@ async function scanDealerInventory(
 
   const origin = new URL(website).origin;
   const sitemapVehicles = await scanDealerSitemapInventory(origin, dealer, criteria);
-  return sitemapVehicles;
+  if (sitemapVehicles.length) return sitemapVehicles;
+
+  return scanDealerInventoryPages(origin, website, dealer, criteria);
+}
+
+async function scanDealerInventoryPages(
+  origin: string,
+  website: string,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const candidates = await discoverInventoryPages(origin, website, criteria);
+  const vehicles: Vehicle[] = [];
+
+  for (const candidate of candidates.slice(0, MAX_PAGES_PER_DEALER)) {
+    if (!(await isAllowedByRobots(candidate))) continue;
+
+    try {
+      const html = await fetchHtml(candidate);
+      if (looksLikeParkedDomain(html)) continue;
+
+      const extracted = extractVehiclesFromHtml(html, candidate, dealer, criteria)
+        .map((vehicle) => ({
+          ...vehicle,
+          raw_data: {
+            ...(vehicle.raw_data || {}),
+            source_priority: "fallback_inventory_page",
+          },
+        }));
+
+      vehicles.push(...extracted);
+    } catch (error) {
+      console.warn(`${dealer.name} fallback skipped ${candidate}: ${errorMessage(error)}`);
+    }
+
+    if (uniqueVehiclesByVin(vehicles).length >= MAX_FALLBACK_VEHICLES_PER_DEALER) break;
+  }
+
+  return uniqueVehiclesByVin(vehicles).slice(0, MAX_FALLBACK_VEHICLES_PER_DEALER);
 }
 
 async function scanDealerSitemapInventory(
@@ -565,11 +604,17 @@ async function discoverInventoryPages(
     "/new-vehicles/",
     "/new/",
     "/inventory/new/",
+    `/inventory/new/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
+    `/inventory/new/${brandSlug}-${modelSlug}.htm`,
+    `/inventory/all/${criteria.year || ""}-${brandSlug}-${modelSlug}.htm`,
+    `/inventory/all/${brandSlug}-${modelSlug}.htm`,
     `/new-${brandSlug}/`,
     `/new-${brandSlug}-inventory/`,
     `/new/${brandSlug}/`,
     `/new/${brandSlug}/${modelSlug}/`,
     `/inventory/new/${brandSlug}/${modelSlug}/`,
+    `/new-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}&model=${encodeURIComponent(criteria.model)}`,
+    `/new-inventory/index.htm?model=${encodeURIComponent(criteria.model)}`,
     `/all-inventory/index.htm?make=${encodeURIComponent(criteria.brand)}`,
   ];
 
@@ -588,7 +633,10 @@ async function discoverInventoryPages(
     links.forEach((url) => found.add(url));
   }
 
-  fixed.map((path) => new URL(path, origin).toString()).forEach((url) => found.add(url));
+  fixed
+    .filter((path) => !path.includes("//") && !path.includes("/."))
+    .map((path) => new URL(path, origin).toString())
+    .forEach((url) => found.add(url));
 
   return [...found];
 }
@@ -803,10 +851,11 @@ function matchesVehicleBlock(text: string, criteria: { brand: string; model: str
   const haystack = normalizeSearchText(text);
   const modelWords = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
   const yearOk = !criteria.year || haystack.includes(String(criteria.year));
+  const brandOk = !criteria.brand || haystack.includes(normalizeSearchText(criteria.brand));
   const modelOk = modelWords.length > 0 && modelWords.every((word) => haystack.includes(word));
   const vehicleSignal = /\bvin\b|\bstock\b|\bmsrp\b|\bwindow sticker\b|\bexterior\b|\binterior\b/i.test(text);
 
-  return yearOk && modelOk && vehicleSignal;
+  return yearOk && brandOk && modelOk && vehicleSignal;
 }
 
 function guessTrim(text: string) {
@@ -901,6 +950,11 @@ function stripHtml(html: string) {
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " "));
+}
+
+function looksLikeParkedDomain(html: string) {
+  const text = stripHtml(html).toLowerCase();
+  return /domain name is for sale|buy this domain|forsale domain|parked domain|dynadot/.test(text);
 }
 
 function decodeHtmlEntities(value: string) {
