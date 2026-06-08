@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-sitemap-vin-v4";
+const SCANNER_VERSION = "2026-06-07-confirmed-sitemap-only-v5";
 
 type Dealer = {
   name: string;
@@ -59,7 +59,7 @@ const MAX_DEALERS_TO_SCAN = 12;
 const MAX_PAGES_PER_DEALER = 10;
 const MAX_HTML_CHARS = 900_000;
 const MAX_SITEMAP_VEHICLES_PER_DEALER = 60;
-const MAX_DETAIL_PAGES_PER_DEALER = 25;
+const MAX_DETAIL_PAGES_PER_DEALER = 8;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -384,28 +384,7 @@ async function scanDealerInventory(
 
   const origin = new URL(website).origin;
   const sitemapVehicles = await scanDealerSitemapInventory(origin, dealer, criteria);
-  if (sitemapVehicles.length) return sitemapVehicles;
-
-  const candidates = await discoverInventoryPages(origin, website, criteria);
-  const vehicles: Vehicle[] = [];
-
-  for (const candidate of candidates.slice(0, MAX_PAGES_PER_DEALER)) {
-    if (!(await isAllowedByRobots(candidate))) {
-      continue;
-    }
-
-    try {
-      const html = await fetchHtml(candidate);
-      const extracted = extractVehiclesFromHtml(html, candidate, dealer, criteria);
-      vehicles.push(...extracted);
-    } catch (error) {
-      console.warn(`${dealer.name} candidate skipped ${candidate}: ${errorMessage(error)}`);
-    }
-
-    if (vehicles.length >= 20) break;
-  }
-
-  return uniqueVehiclesByVin(vehicles);
+  return sitemapVehicles;
 }
 
 async function scanDealerSitemapInventory(
@@ -454,6 +433,9 @@ async function enrichVehicleFromDetailPage(
       ...vehicle,
       ...(extracted || {}),
       vin: vehicle.vin,
+      year: vehicle.year,
+      brand: vehicle.brand,
+      model: vehicle.model,
       listing_url: detailUrl,
       trim: extracted?.trim && extracted.trim !== "Verify" ? extracted.trim : vehicle.trim,
       msrp: extracted?.msrp || vehicle.msrp || guessPrice(text, ["MSRP", "Retail Price", "Sticker"]),
@@ -479,22 +461,23 @@ function vehicleFromDetailUrl(
   dealer: Dealer,
   criteria: { brand: string; model: string; year: number }
 ) {
-  const decodedUrl = decodeHtmlEntities(decodeURIComponent(url.replace(/\+/g, " ")));
+  const decodedUrl = decodeHtmlEntities(safeDecodeURIComponent(url.replace(/\+/g, " ")));
   const vin = cleanVin(decodedUrl.match(/([A-HJ-NPR-Z0-9]{17})(?:$|[/?#])/i)?.[1] || "");
   if (!vin) return null;
 
   const path = new URL(url).pathname.replace(/^\/+/, "");
-  const decodedPath = decodeHtmlEntities(decodeURIComponent(path.replace(/\+/g, " ")));
+  const decodedPath = decodeHtmlEntities(safeDecodeURIComponent(path.replace(/\+/g, " ")));
   const parts = decodedPath
-    .split("-")
+    .split(/[\/-]+/)
     .map((part) => cleanText(part))
     .filter(Boolean);
   const newIndex = parts.findIndex((part) => sameText(part, "new"));
   const yearIndex = parts.findIndex((part) => /^\d{4}$/.test(part));
   const brandIndex = parts.findIndex((part) => sameText(part, criteria.brand));
 
-  if (newIndex !== 0 || yearIndex < 0 || brandIndex < 0) return null;
-  if (criteria.year && Number(parts[yearIndex]) !== criteria.year) return null;
+  if (newIndex < 0 || yearIndex < newIndex || brandIndex < newIndex) return null;
+  const actualYear = Number(parts[yearIndex]);
+  if (criteria.year && actualYear !== criteria.year) return null;
 
   const modelParts = normalizeSearchText(criteria.model).split(" ").filter(Boolean);
   const afterBrand = parts.slice(brandIndex + 1, Math.max(parts.length - 1, brandIndex + 1));
@@ -502,9 +485,14 @@ function vehicleFromDetailUrl(
   if (!modelParts.length || !modelParts.every((part) => normalizedAfterBrand.includes(part))) return null;
 
   const modelEnd = findModelEndIndex(afterBrand, modelParts);
+  const actualModel = cleanText(afterBrand.slice(0, modelEnd).join(" "));
   const trim = cleanText(afterBrand.slice(modelEnd).join(" ")) || "Verify";
 
-  return buildVehicle(vin, url, dealer, criteria, {
+  return buildVehicle(vin, url, dealer, {
+    brand: criteria.brand,
+    model: actualModel || criteria.model,
+    year: actualYear,
+  }, {
     trim,
     stock_number: "",
     raw_data: { source: "sitemap_vehicle_detail_url" },
@@ -890,6 +878,14 @@ function decodeHtmlEntities(value: string) {
     .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&#([0-9]+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
     .replace(/\s+/g, " ");
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function cleanVin(value: unknown) {
