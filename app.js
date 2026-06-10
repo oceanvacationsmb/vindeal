@@ -586,17 +586,30 @@ function dealerRatingText(meta) {
   return meta.google_rating ? `Google ${meta.google_rating} stars` : "";
 }
 
+function phoneHref(phone) {
+  const digits = String(phone || "").replace(/[^\d+]/g, "");
+  return digits ? `tel:${digits}` : "";
+}
+
+function mapsHref(address) {
+  return address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "";
+}
+
 function dealerMetaRows(meta) {
-  return [
-    dealerRatingText(meta),
-    meta.phone,
-    meta.address,
-    meta.hours,
-    meta.email,
-  ]
-    .filter(Boolean)
-    .map((item) => `<span>${item}</span>`)
-    .join("");
+  const rows = [];
+  const rating = dealerRatingText(meta);
+  const phone = meta.phone || "";
+  const address = meta.address || "";
+  const website = meta.website || "";
+
+  if (rating) rows.push(`<span>${rating}</span>`);
+  if (phone) rows.push(`<a href="${phoneHref(phone)}">${phone}</a>`);
+  if (address) rows.push(`<a href="${mapsHref(address)}" target="_blank" rel="noopener">${address}</a>`);
+  if (meta.hours) rows.push(`<span>${meta.hours}</span>`);
+  if (website) rows.push(`<a href="${website}" target="_blank" rel="noopener">Dealer Website</a>`);
+  if (meta.email) rows.push(`<span>${meta.email}</span>`);
+
+  return rows.join("");
 }
 
 function detectDealerAddons(v) {
@@ -889,7 +902,7 @@ async function loadDealers() {
 
 function normalizeCachedVehicle(v) {
   const raw = v.raw_data || {};
-  const listingUrl = v.listing_url || raw.card_json?.VehicleCard?.VehicleDetailUrl || "";
+  const listingUrl = v.listing_url || (raw.source === "html_vin_block" ? "" : raw.card_json?.VehicleCard?.VehicleDetailUrl || "");
   const rawImageUrl = pickImageUrl(v.image_url || raw.card_json?.VehicleCard?.VehicleImageModel?.VehiclePhotoSrc || "");
   let imageUrl = rawImageUrl;
 
@@ -1000,11 +1013,15 @@ function updateModelOptions() {
   const brand = document.getElementById("brand").value;
   const modelSelect = document.getElementById("model");
 
-  modelSelect.innerHTML = `<option value="Any">All models</option>`;
+  modelSelect.innerHTML = "";
 
-  unique(catalog.filter((x) => x.brand === brand).map((x) => x.model)).forEach((model) => {
+  const models = unique(catalog.filter((x) => x.brand === brand).map((x) => x.model));
+  models.forEach((model) => {
     modelSelect.innerHTML += `<option value="${model}">${model}</option>`;
   });
+
+  const defaultModel = models.find((model) => sameText(model, "IONIQ 5")) || models[0];
+  if (defaultModel) modelSelect.value = defaultModel;
 
   updateTrimOptions();
 }
@@ -1015,11 +1032,6 @@ function updateTrimOptions() {
   const trimSelect = document.getElementById("trim");
 
   trimSelect.innerHTML = `<option value="Any">Any</option>`;
-  if (isAnyValue(model)) {
-    updateYearOptions();
-    refreshModelFilters();
-    return;
-  }
 
   unique(
     catalog
@@ -1609,7 +1621,7 @@ function renderVehicles() {
           <div class="dealer-box-head">
             <div>
               <h3>${dealerName}</h3>
-              <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""} ${first.dealer_distance_miles ? " - " + first.dealer_distance_miles + " miles away" : ""}</p>
+              <p>${first.dealer_city || ""}${first.dealer_state ? ", " + first.dealer_state : ""}${first.dealer_distance_miles ? " - " + first.dealer_distance_miles + " miles away" : ""}</p>
               <div class="dealer-meta">
                 ${dealerMetaRows(meta)}
               </div>
@@ -1650,7 +1662,7 @@ function renderVehicleCard(v) {
   const targetResult = calculateTargetDiscount(v, 0);
 
   return `
-    <div class="vehicle-card ${isSelected ? "selected-card" : ""}" draggable="true" data-vin="${v.vin}">
+    <div class="vehicle-card ${isSelected ? "selected-card" : ""}" data-vin="${v.vin}">
       <div class="image-box">
         ${
           v.image_url
@@ -1667,7 +1679,6 @@ function renderVehicleCard(v) {
           <div>
             <h3>${v.year || ""} ${v.brand || ""} ${v.model || ""}</h3>
             <p class="trim-line">${v.trim || ""}</p>
-            <p class="trim-line">${v.dealer_name || "Dealer"}${v.dealer_distance_miles ? " - " + v.dealer_distance_miles + " miles" : ""}</p>
           </div>
           <label class="select-car">
             <input type="checkbox" ${isSelected ? "checked" : ""} onchange="toggleSelected('${v.vin}', this.checked)" />
@@ -1687,7 +1698,9 @@ function renderVehicleCard(v) {
           <span>Interior: ${v.interior_color || "Verify with dealer"}</span>
         </div>
 
-        <div class="price-box">
+        <details class="card-section" open>
+          <summary>Deal basics</summary>
+          <div class="price-box">
           ${priceItem("MSRP", moneyOrVerify(v.msrp), "msrp")}
           ${priceItem("Dealer Website Price", moneyOrVerify(v.sale_price), "dealerWebsitePrice")}
           ${priceItem("Base Cap Cost Est.", quote.adjustedCapCost ? money(quote.adjustedCapCost) : "Verify", "adjustedCapCost")}
@@ -1703,49 +1716,53 @@ function renderVehicleCard(v) {
           ${priceItem("Base Program", `${quote.term} mo / ${Number(quote.miles || 0).toLocaleString()} mi`, "baseProgram")}
           ${priceItem("Estimated Monthly", basePayment ? money(basePayment) + "/mo" : "Verify", "estimatedMonthly")}
           ${priceItem("Total Payments", basePayment ? money(basePayment * quote.term) : "Verify", "totalPayments")}
-        </div>
-
-        <div class="tax-box">
-          <div>
-            <span>Estimated State Tax ${helpTip(PRICE_HELP.estimatedTax)}</span>
-            <b>${money(taxEstimate.tax)}</b>
           </div>
-          <div>
-            <span>State Rule ${helpTip(PRICE_HELP.taxRule)}</span>
-            <b>${registrationState} - ${((taxEstimate.rate || 0) * 100).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}%${taxEstimate.cap ? ` capped at ${money(taxEstimate.cap)}` : ""}</b>
-          </div>
-          <p>${taxEstimate.note}</p>
-        </div>
-
-        <div class="lease-scenario">
-          <b>Basic Lease Program</b>
-          <span>${quote.term} months / ${Number(quote.miles || 0).toLocaleString()} miles per year. This is the public estimate basis for the card.</span>
           <span id="program_status_${v.vin}" class="program-note ${quote.programVerified ? "good" : "warn"}">${quote.programStatus}</span>
-        </div>
+        </details>
 
-        <div class="target-box">
-          <label>Target Monthly Payment</label>
-          <div class="target-row">
-            <input id="${targetInputId}" type="number" min="0" max="${Math.floor(basePayment || 0)}" step="25" placeholder="Example 599" oninput="updateTargetPayment('${v.vin}')" />
-            <button type="button" onclick="updateTargetPayment('${v.vin}')">Calculate</button>
+        <details class="card-section">
+          <summary>Sales tax estimate</summary>
+          <div class="tax-box">
+            <div>
+              <span>Estimated State Tax ${helpTip(PRICE_HELP.estimatedTax)}</span>
+              <b>${money(taxEstimate.tax)}</b>
+            </div>
+            <div>
+              <span>State Rule ${helpTip(PRICE_HELP.taxRule)}</span>
+              <b>${registrationState} - ${((taxEstimate.rate || 0) * 100).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}%${taxEstimate.cap ? ` capped at ${money(taxEstimate.cap)}` : ""}</b>
+            </div>
+            <p>${taxEstimate.note}</p>
           </div>
-          <div id="target_result_${v.vin}" class="target-result risk-${targetResult.risk}">
-            <b>${targetResult.label}</b>
-            <span>Enter the buyer's target payment to estimate the dealer discount needed.</span>
-          </div>
-        </div>
+        </details>
 
-        <div class="formula-box">
-          <b>Estimate Disclaimer</b>
-          <span>Lease structure: base cap cost = MSRP - manufacturer incentive. Bank acquisition fee, dealer fee, taxes, and add-ons are shown separately.</span>
-          <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) x money factor.</span>
-          <span>Before dealer discount, taxes, registration/government fees, doc fee, dealer add-ons, and final dealer documents.</span>
-        </div>
+        <details class="card-section">
+          <summary>Target payment</summary>
+          <div class="target-box">
+            <div class="target-row">
+              <input id="${targetInputId}" type="number" min="0" max="${Math.floor(basePayment || 0)}" step="25" placeholder="Example 599" oninput="updateTargetPayment('${v.vin}')" />
+              <button type="button" onclick="updateTargetPayment('${v.vin}')">Calculate</button>
+            </div>
+            <div id="target_result_${v.vin}" class="target-result risk-${targetResult.risk}">
+              <b>${targetResult.label}</b>
+              <span>Enter the buyer's target payment to estimate the dealer discount needed.</span>
+            </div>
+          </div>
+        </details>
+
+        <details class="card-section">
+          <summary>Estimate notes</summary>
+          <div class="formula-box">
+            <b>Estimate Disclaimer</b>
+            <span>Lease structure: base cap cost = MSRP - manufacturer incentive. Bank acquisition fee, dealer fee, taxes, and add-ons are shown separately.</span>
+            <span>Depreciation: (adjusted cap cost - residual value) / term. Rent charge: (adjusted cap cost + residual value) x money factor.</span>
+            <span>Before dealer discount, taxes, registration/government fees, doc fee, dealer add-ons, and final dealer documents.</span>
+          </div>
+        </details>
 
         ${
           dealerAddons > 0
             ? `<div class="addon-total danger">Dealer Add-ons / Accessories Detected: ${money(dealerAddons)}</div>`
-            : `<div class="addon-total good">No clear dealer add-ons detected</div>`
+            : ""
         }
 
         ${
@@ -1754,26 +1771,30 @@ function renderVehicleCard(v) {
             : ""
         }
 
-        <div class="rebate-list">
-          <b>Available Manufacturer Incentives</b>
-          ${rebateBadge ? `<div class="rebate-badge ${rebateBadge.className}"><strong>${rebateBadge.label}</strong><span>${rebateBadge.text}</span></div>` : ""}
-          <span>You may be eligible for additional manufacturer or dealer rebates based on qualifications such as loyalty, conquest, military, first responder, education, healthcare, location, or lender approval. Dealer must verify.</span>
-          ${
-            incentiveRows.length
-              ? incentiveRows
-                  .map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`)
-                  .join("")
-              : `<span>No verified OEM incentive loaded for this car yet.</span>`
-          }
-        </div>
+        <details class="card-section">
+          <summary>Manufacturer incentives</summary>
+          <div class="rebate-list">
+            ${rebateBadge ? `<div class="rebate-badge ${rebateBadge.className}"><strong>${rebateBadge.label}</strong><span>${rebateBadge.text}</span></div>` : ""}
+            <span>You may be eligible for additional manufacturer or dealer rebates based on qualifications such as loyalty, conquest, military, first responder, education, healthcare, location, or lender approval. Dealer must verify.</span>
+            ${
+              incentiveRows.length
+                ? incentiveRows
+                    .map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`)
+                    .join("")
+                : `<span>No verified OEM incentive loaded for this car yet.</span>`
+            }
+          </div>
+        </details>
 
         ${
           dealerOffers.length
-            ? `<div class="rebate-list dealer-offers">
-                <b>Dealer / Listing Offers Detected</b>
-                <span>Shown separately from manufacturer rebates. These are not applied to the lease estimate until verified by the dealer or OEM source.</span>
-                ${dealerOffers.map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`).join("")}
-              </div>`
+            ? `<details class="card-section">
+                <summary>Dealer listing offers</summary>
+                <div class="rebate-list dealer-offers">
+                  <span>Shown separately from manufacturer rebates. These are not applied to the lease estimate until verified by the dealer or OEM source.</span>
+                  ${dealerOffers.map((r) => `<span>${r.name}: ${money(r.amount)}${r.detail ? " - " + r.detail : ""}</span>`).join("")}
+                </div>
+              </details>`
             : ""
         }
 
@@ -1830,7 +1851,7 @@ function updateTargetPayment(vin) {
       `;
   }
 
-  return {
+  const targetPayload = {
     target_monthly_payment: target,
     required_dealer_discount: result.requiredDiscount,
     required_discount_percent: result.discountPercent,
@@ -1839,6 +1860,9 @@ function updateTargetPayment(vin) {
     trade_equity_applied: result.tradeEquity,
     cap_cost_after_trade_before_discount: result.currentCapCost,
   };
+
+  v.target_payment_details = targetPayload;
+  return targetPayload;
 }
 
 function renderComparePanel() {
@@ -1960,7 +1984,7 @@ function toggleTradeIn(enabled) {
   if (status) status.textContent = enabled ? "Trade added" : "Tell dealers what to expect.";
 
   if (!enabled) {
-    ["tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradeKbbValue", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment"].forEach((id) => {
+    ["tradeMake", "tradeModel", "tradeTrim", "tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradeKbbValue", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment", "tradeLeaseEndDate"].forEach((id) => {
       const input = document.getElementById(id);
       if (input) input.value = "";
     });
@@ -2007,6 +2031,9 @@ function getTradeData() {
   if (!tradeBox || tradeBox.classList.contains("hidden")) return null;
 
   return {
+    trade_make: document.getElementById("tradeMake")?.value.trim() || "",
+    trade_model: document.getElementById("tradeModel")?.value.trim() || "",
+    trade_trim: document.getElementById("tradeTrim")?.value.trim() || "",
     trade_vin: document.getElementById("tradeVin").value.trim(),
     license_plate: document.getElementById("tradePlate").value.trim(),
     plate_state: document.getElementById("tradePlateState").value.trim(),
@@ -2017,6 +2044,7 @@ function getTradeData() {
     payoff_amount: Number(document.getElementById("tradePayoff").value || 0),
     payments_left: Number(document.getElementById("tradePaymentsLeft").value || 0),
     monthly_payment: Number(document.getElementById("tradeMonthlyPayment").value || 0),
+    lease_end_date: document.getElementById("tradeLeaseEndDate")?.value || "",
     kbb_low: 0,
     kbb_average: 0,
     kbb_high: 0,

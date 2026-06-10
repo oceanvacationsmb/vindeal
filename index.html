@@ -12,164 +12,55 @@
       <h1>VINDeal</h1>
       <p>Lease deal hunter. Public vehicle data first, then verified dealer bids.</p>
     </div>
+    <button type="button" class="profile-top-btn" onclick="openProfileModal()">Profile</button>
   </header>
 
   <main class="container">
     <div class="app-shell">
       <aside class="sidebar">
-        <section class="side-card">
-          <div class="section-head">
-            <div>
-              <h2>Find Cars</h2>
-              <p>Start with the basics. Filters appear after results load.</p>
-            </div>
+        <section class="side-card search-strip">
+          <div class="field search-field zip-field">
+            <label>ZIP</label>
+            <input id="zipCode" type="text" value="29577" />
           </div>
 
-          <div class="field-stack">
-            <div class="mini-grid">
-              <div class="field">
-                <label>ZIP Code</label>
-                <input id="zipCode" type="text" value="29577" />
-              </div>
+          <div class="field search-field">
+            <label>Radius</label>
+            <select id="radius">
+              <option value="50">50 mi</option>
+              <option value="100">100 mi</option>
+              <option value="250" selected>250 mi</option>
+              <option value="500">500 mi</option>
+              <option value="1000">1000 mi</option>
+            </select>
+          </div>
 
-              <div class="field">
-                <label>Radius</label>
-                <select id="radius">
-                  <option value="50">50 mi</option>
-                  <option value="100">100 mi</option>
-                  <option value="250" selected>250 mi</option>
-                  <option value="500">500 mi</option>
-                  <option value="1000">1000 mi</option>
-                </select>
-              </div>
-            </div>
+          <div class="field search-field state-field">
+            <label>State</label>
+            <select id="registrationState" onchange="loadProgramsForSelectedCar()"></select>
+          </div>
 
-            <div class="field">
-              <label>Registering State</label>
-              <select id="registrationState" onchange="loadProgramsForSelectedCar()"></select>
-            </div>
+          <div class="field search-field">
+            <label>Make</label>
+            <select id="brand" onchange="updateModelOptions()"></select>
+          </div>
 
-            <div class="field">
-              <label>Make</label>
-              <select id="brand" onchange="updateModelOptions()"></select>
-            </div>
+          <div class="field search-field">
+            <label>Model</label>
+            <select id="model" onchange="updateTrimOptions()"></select>
+          </div>
 
-            <div class="field">
-              <label>Model</label>
-              <select id="model" onchange="updateTrimOptions()"></select>
-            </div>
+          <div class="field search-field">
+            <label>Trim</label>
+            <select id="trim" onchange="refreshModelFilters()"></select>
+          </div>
 
-            <div class="mini-grid">
-              <div class="field">
-                <label>Trim</label>
-                <select id="trim" onchange="refreshModelFilters()"></select>
-              </div>
-
-              <div class="field">
-                <label>Year</label>
-                <select id="year" onchange="refreshModelFilters()"></select>
-              </div>
-            </div>
+          <div class="field search-field year-field">
+            <label>Year</label>
+            <select id="year" onchange="refreshModelFilters()"></select>
           </div>
 
           <button id="scanBtn" onclick="scanBackendInventory()">Find My Car</button>
-        </section>
-
-        <section class="side-card">
-          <div class="section-head">
-            <div>
-              <h2>Buyer Profile</h2>
-              <p>Optional now. Required only when inviting dealers.</p>
-            </div>
-          </div>
-
-          <button type="button" class="secondary-btn full-btn" onclick="openProfileModal()">Complete Profile</button>
-        </section>
-
-        <section class="side-card">
-          <div class="trade-head">
-            <div>
-              <h2>Trade-In</h2>
-              <p id="tradeStatus">Tell dealers what to expect.</p>
-            </div>
-            <div class="trade-actions">
-              <button id="addTradeBtn" type="button" class="secondary-btn" onclick="toggleTradeIn(true)">Add</button>
-              <button id="removeTradeBtn" type="button" class="ghost-btn hidden" onclick="toggleTradeIn(false)">Remove</button>
-            </div>
-          </div>
-
-          <div id="tradeBox" class="trade-box hidden">
-            <div class="field-stack">
-              <div class="field">
-                <label>Trade VIN</label>
-                <input id="tradeVin" type="text" placeholder="VIN" />
-              </div>
-
-              <div class="mini-grid">
-                <div class="field">
-                  <label>Plate</label>
-                  <input id="tradePlate" type="text" placeholder="Plate" />
-                </div>
-
-                <div class="field">
-                  <label>State</label>
-                  <input id="tradePlateState" type="text" placeholder="SC" />
-                </div>
-              </div>
-
-              <div class="field">
-                <label>Mileage</label>
-                <input id="tradeMileage" type="number" placeholder="45000" />
-              </div>
-
-              <div class="field">
-                <label>KBB Value</label>
-                <input id="tradeKbbValue" type="number" placeholder="Pending licensed API" />
-              </div>
-
-              <div class="field">
-                <label>Condition</label>
-                <select id="tradeCondition">
-                  <option value="">Select</option>
-                  <option value="excellent">Excellent</option>
-                  <option value="very_good">Very Good</option>
-                  <option value="good">Good</option>
-                  <option value="fair">Fair</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label>Current Loan Type</label>
-                <select id="tradeLoanType">
-                  <option value="">Select</option>
-                  <option value="finance">Finance</option>
-                  <option value="lease">Lease</option>
-                  <option value="paid_off">Paid off</option>
-                </select>
-              </div>
-
-              <div class="mini-grid">
-                <div class="field">
-                  <label>Payoff</label>
-                  <input id="tradePayoff" type="number" placeholder="0" />
-                </div>
-
-                <div class="field">
-                  <label>Payment</label>
-                  <input id="tradeMonthlyPayment" type="number" placeholder="0" />
-                </div>
-              </div>
-
-              <div class="field">
-                <label>Payments Left</label>
-                <input id="tradePaymentsLeft" type="number" placeholder="0" />
-              </div>
-            </div>
-
-            <div class="trade-note">
-              KBB value stays pending until licensed KBB API access is connected.
-            </div>
-          </div>
         </section>
       </aside>
 
@@ -340,10 +231,113 @@
         </div>
       </div>
 
+      <div class="profile-section">
+        <div class="trade-head">
+          <div>
+            <b>Trade-In</b>
+            <p id="tradeStatus">Optional. Add this only if the buyer wants the dealer to include trade equity.</p>
+          </div>
+          <div class="trade-actions">
+            <button id="addTradeBtn" type="button" class="secondary-btn" onclick="toggleTradeIn(true)">Add Trade</button>
+            <button id="removeTradeBtn" type="button" class="ghost-btn hidden" onclick="toggleTradeIn(false)">Remove</button>
+          </div>
+        </div>
+
+        <div id="tradeBox" class="trade-box hidden">
+          <div class="form-grid contact-grid">
+            <div class="field">
+              <label>Make</label>
+              <input id="tradeMake" type="text" placeholder="Trade make" />
+            </div>
+
+            <div class="field">
+              <label>Model</label>
+              <input id="tradeModel" type="text" placeholder="Trade model" />
+            </div>
+
+            <div class="field">
+              <label>Trim</label>
+              <input id="tradeTrim" type="text" placeholder="Trim" />
+            </div>
+
+            <div class="field">
+              <label>Trade VIN</label>
+              <input id="tradeVin" type="text" placeholder="VIN" />
+            </div>
+
+            <div class="field">
+              <label>Plate</label>
+              <input id="tradePlate" type="text" placeholder="Plate" />
+            </div>
+
+            <div class="field">
+              <label>Plate State</label>
+              <input id="tradePlateState" type="text" placeholder="SC" />
+            </div>
+
+            <div class="field">
+              <label>Mileage</label>
+              <input id="tradeMileage" type="number" placeholder="45000" />
+            </div>
+
+            <div class="field">
+              <label>Estimated Value</label>
+              <input id="tradeKbbValue" type="number" placeholder="Pending API" />
+            </div>
+
+            <div class="field">
+              <label>Condition</label>
+              <select id="tradeCondition">
+                <option value="">Select</option>
+                <option value="excellent">Excellent</option>
+                <option value="very_good">Very Good</option>
+                <option value="good">Good</option>
+                <option value="fair">Fair</option>
+                <option value="below_average">Below Average</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Current Account</label>
+              <select id="tradeLoanType">
+                <option value="">Select</option>
+                <option value="finance">Finance</option>
+                <option value="lease">Lease</option>
+                <option value="paid_off">Paid off</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Payoff</label>
+              <input id="tradePayoff" type="number" placeholder="0" />
+            </div>
+
+            <div class="field">
+              <label>Current Payment</label>
+              <input id="tradeMonthlyPayment" type="number" placeholder="0" />
+            </div>
+
+            <div class="field">
+              <label>Payments Left</label>
+              <input id="tradePaymentsLeft" type="number" placeholder="0" />
+            </div>
+
+            <div class="field">
+              <label>Lease End Date</label>
+              <input id="tradeLeaseEndDate" type="date" />
+            </div>
+          </div>
+
+          <div class="trade-note">
+            If the trade is leased, the dealer must review the lease contract and payoff rules. Some lease contracts restrict third-party payoffs or trading into a different make.
+          </div>
+        </div>
+      </div>
+
       <button type="button" class="secondary-btn full-btn" onclick="closeProfileModal()">Save Profile</button>
     </div>
   </div>
 
-  <script src="app.js?v=98"></script>
+  <script src="app.js?v=99"></script>
 </body>
 </html>
