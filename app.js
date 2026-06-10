@@ -9,8 +9,6 @@ let colorsCatalog = [];
 let rebatesCatalog = [];
 let leaseProgramsCatalog = [];
 let leaseProgramPreview = null;
-let vpicMakesCatalog = [];
-let vpicModelsCache = {};
 let removedVins = new Set();
 let favoriteVins = new Set();
 let selectedVins = new Set();
@@ -984,7 +982,6 @@ async function loadCatalog() {
 
   updateBrandOptions();
   initTradeVehicleOptions();
-  loadVpicMakesForTrade();
 }
 
 async function loadAllColors() {
@@ -1116,50 +1113,14 @@ function initTradeVehicleOptions() {
     setSelectOptions(yearSelect, years, "Year");
   }
 
-  const makes = unique([...catalogMakes(), ...vpicMakesCatalog]).sort((a, b) => a.localeCompare(b));
-  setSelectOptions(document.getElementById("tradeMake"), makes, "Make");
+  setSelectOptions(document.getElementById("tradeMake"), catalogMakes(), "Make");
   updateTradeModelOptions();
 }
 
-async function loadVpicMakesForTrade() {
-  try {
-    const response = await fetch("https://vpic.nhtsa.dot.gov/api/vehicles/GetAllMakes?format=json");
-    const data = await response.json();
-    vpicMakesCatalog = unique((data.Results || []).map((item) => item.Make_Name)).sort((a, b) => a.localeCompare(b));
-
-    const makeSelect = document.getElementById("tradeMake");
-    const merged = unique([...catalogMakes(), ...vpicMakesCatalog]).sort((a, b) => a.localeCompare(b));
-    setSelectOptions(makeSelect, merged, "Make");
-  } catch (error) {
-    console.warn("NHTSA vPIC make list unavailable, using local catalog", error);
-  }
-}
-
-async function updateTradeModelOptions() {
+function updateTradeModelOptions() {
   const make = document.getElementById("tradeMake")?.value || "";
   const year = document.getElementById("tradeYear")?.value || "";
-  let models = catalogModelsFor(make, year);
-
-  if (make) {
-    const cacheKey = `${make}:${year || "any"}`;
-    if (!vpicModelsCache[cacheKey]) {
-      try {
-        const encodedMake = encodeURIComponent(make);
-        const endpoint = year
-          ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${year}?format=json`
-          : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodedMake}?format=json`;
-        const response = await fetch(endpoint);
-        const data = await response.json();
-        vpicModelsCache[cacheKey] = unique((data.Results || []).map((item) => item.Model_Name)).sort((a, b) => a.localeCompare(b));
-      } catch (error) {
-        vpicModelsCache[cacheKey] = [];
-        console.warn("NHTSA vPIC model list unavailable, using local catalog", error);
-      }
-    }
-
-    models = unique([...models, ...vpicModelsCache[cacheKey]]).sort((a, b) => a.localeCompare(b));
-  }
-
+  const models = catalogModelsFor(make, year);
   setSelectOptions(document.getElementById("tradeModel"), models, "Model");
   updateTradeTrimOptions();
 }
