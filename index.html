@@ -12,8 +12,24 @@
       <h1>VINDeal</h1>
       <p>Lease deal hunter. Public vehicle data first, then verified dealer bids.</p>
     </div>
-    <button type="button" class="profile-top-btn" onclick="openProfileModal()">Profile</button>
+    <div class="top-actions">
+      <button type="button" class="cart-btn" onclick="toggleCartPanel()">
+        Added Cars <span id="cartCount">0</span>
+      </button>
+      <button type="button" class="profile-top-btn" onclick="openProfileModal()">Profile</button>
+    </div>
   </header>
+
+  <section id="cartPanel" class="cart-panel hidden">
+    <div class="cart-head">
+      <b>Added Cars</b>
+      <button type="button" class="ghost-btn" onclick="toggleCartPanel(false)">Close</button>
+    </div>
+    <div id="cartItems" class="cart-items">
+      <span class="muted">No cars added yet.</span>
+    </div>
+    <button type="button" class="secondary-btn full-btn" onclick="sendSelectedBidRequests()">Invite Dealers For Bidding</button>
+  </section>
 
   <main class="container">
     <div class="app-shell">
@@ -96,25 +112,13 @@
         </section>
 
         <section id="resultsHead" class="results-head hidden">
-          <div>
-            <h2>Results</h2>
-          </div>
+          <div></div>
           <p id="resultsSource" class="small-note"></p>
         </section>
 
         <section id="dealerCoverage" class="dealer-coverage hidden"></section>
 
         <section id="resultFilters" class="result-filters hidden">
-          <div class="sort-row">
-            <label for="resultSort">Sort</label>
-            <select id="resultSort" onchange="updateResultSort(this.value)">
-              <option value="closest" selected>Closest dealer</option>
-              <option value="price_low">Price low to high</option>
-              <option value="price_high">Price high to low</option>
-              <option value="discount">Best discount</option>
-              <option value="deal">Best deal</option>
-            </select>
-          </div>
           <div id="filterChips"></div>
         </section>
 

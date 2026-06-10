@@ -21,6 +21,7 @@ let lastDealersInRadius = [];
 let currentSearchUiState = "idle";
 let activeResultFilters = {
   dealer: new Set(),
+  model: new Set(),
   trim: new Set(),
   exterior: new Set(),
   interior: new Set(),
@@ -279,7 +280,7 @@ function isAnyValue(value) {
 
 function setResultsSource(text) {
   const el = document.getElementById("resultsSource");
-  if (el) el.textContent = text || "";
+  if (el) el.textContent = "";
 }
 
 function setSearchUiState(state) {
@@ -1271,48 +1272,68 @@ function buildResultFilters() {
     return;
   }
 
-  const groups = [
-    ["dealer", "Dealer", vehicles.map((v) => v.dealer_name || "Dealer")],
-    ["trim", "Trim", vehicles.map((v) => v.trim)],
-    ["exterior", "Exterior", vehicles.map((v) => v.exterior_color)],
-    ["interior", "Interior", vehicles.map((v) => v.interior_color)],
-  ];
+  const dealers = unique(vehicles.map((v) => v.dealer_name || "Dealer")).sort();
+  const models = unique(vehicles.map((v) => v.model).filter(Boolean)).sort();
+  const trims = unique(vehicles.map((v) => v.trim).filter(Boolean)).sort();
+  const exterior = unique(vehicles.map((v) => v.exterior_color).filter(Boolean)).sort();
+  const interior = unique(vehicles.map((v) => v.interior_color).filter(Boolean)).sort();
 
   if (box) {
     box.innerHTML = `
-      ${groups
-        .map(([key, label, values]) => {
-          const options = unique(values.filter(Boolean)).sort();
-          if (!options.length) return "";
-
-          return `
-            <div class="chip-group">
-              <b>${label}</b>
-              <div class="chip-row">
-                ${options
-                  .map((value) => {
-                    const checked = activeResultFilters[key].has(value);
-                    return `
-                      <label class="filter-chip ${checked ? "active" : ""}">
-                        <input type="checkbox" ${checked ? "checked" : ""} onchange="toggleResultFilter('${key}', '${encodeURIComponent(value)}', this.checked)" />
-                        ${value}
-                      </label>
-                    `;
-                  })
-                  .join("")}
-              </div>
-            </div>
-          `;
-        })
-        .join("")}
-      <div class="filter-actions">
-        <button type="button" class="secondary-btn" onclick="sendSelectedBidRequests()">Invite Selected Dealers</button>
-        <button type="button" class="ghost-btn" onclick="clearResultFilters()">Clear Filters</button>
+      <div class="filter-line">
+        <label class="filter-select">
+          <span>Dealer</span>
+          <select onchange="setSingleResultFilter('dealer', this.value)">
+            <option value="">All dealers</option>
+            ${dealers.map((dealer) => `<option value="${escapeAttr(dealer)}" ${activeResultFilters.dealer.has(dealer) ? "selected" : ""}>${escapeAttr(dealer)}</option>`).join("")}
+          </select>
+        </label>
+        ${inlineFilterGroup("model", "Model", models)}
+        ${inlineFilterGroup("trim", "Trim", trims)}
+        ${inlineFilterGroup("exterior", "Ext. Color", exterior)}
+        ${inlineFilterGroup("interior", "Int. Color", interior)}
+        <label class="filter-select sort-select">
+          <span>Sort</span>
+          <select id="resultSort" onchange="updateResultSort(this.value)">
+            <option value="closest" ${resultSort === "closest" ? "selected" : ""}>Closest dealer</option>
+            <option value="price_low" ${resultSort === "price_low" ? "selected" : ""}>Price low to high</option>
+            <option value="price_high" ${resultSort === "price_high" ? "selected" : ""}>Price high to low</option>
+            <option value="discount" ${resultSort === "discount" ? "selected" : ""}>Best discount</option>
+            <option value="deal" ${resultSort === "deal" ? "selected" : ""}>Best deal</option>
+          </select>
+        </label>
+        <button type="button" class="ghost-btn compact-clear" onclick="clearResultFilters()">Clear</button>
       </div>
     `;
   }
 
   panel.classList.remove("hidden");
+}
+
+function inlineFilterGroup(key, label, options) {
+  if (!options.length) return "";
+
+  return `
+    <div class="inline-filter-group">
+      <span>${label}</span>
+      <div class="inline-filter-options">
+        ${options
+          .slice(0, 8)
+          .map((value) => {
+            const checked = activeResultFilters[key]?.has(value);
+            return `<button type="button" class="${checked ? "active" : ""}" onclick="toggleResultFilter('${key}', '${encodeURIComponent(value)}', ${!checked})">${escapeAttr(value)}</button>`;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function setSingleResultFilter(key, value) {
+  if (!activeResultFilters[key]) return;
+  activeResultFilters[key] = value ? new Set([value]) : new Set();
+  buildResultFilters();
+  renderVehicles();
 }
 
 function clearResultFilters() {
@@ -1473,16 +1494,18 @@ function sortVehicleList(list) {
 
 function updateResultSort(value) {
   resultSort = value || "closest";
+  buildResultFilters();
   renderVehicles();
 }
 
 function matchesLocalFilters(v) {
   const dealerOk = !activeResultFilters.dealer.size || activeResultFilters.dealer.has(v.dealer_name || "Dealer");
+  const modelOk = !activeResultFilters.model?.size || activeResultFilters.model.has(v.model);
   const trimOk = !activeResultFilters.trim.size || activeResultFilters.trim.has(v.trim);
   const extOk = !activeResultFilters.exterior.size || activeResultFilters.exterior.has(v.exterior_color);
   const intOk = !activeResultFilters.interior.size || activeResultFilters.interior.has(v.interior_color);
 
-  return dealerOk && trimOk && extOk && intOk;
+  return dealerOk && modelOk && trimOk && extOk && intOk;
 }
 
 function renderDealerCoverage(body) {
@@ -1625,6 +1648,7 @@ async function scanBackendInventory() {
     compareVins = new Set();
     activeResultFilters = {
       dealer: new Set(),
+      model: new Set(),
       trim: new Set(),
       exterior: new Set(),
       interior: new Set(),
@@ -1781,7 +1805,7 @@ function renderVehicleCard(v) {
           </div>
           <label class="select-car">
             <input type="checkbox" ${isSelected ? "checked" : ""} onchange="toggleSelected('${v.vin}', this.checked)" />
-            Invite
+            <span>${isSelected ? "ADDED" : "Add car"}</span>
           </label>
         </div>
 
@@ -1904,7 +1928,6 @@ function renderVehicleCard(v) {
               ? `<a href="${stickerUrl}" target="_blank" rel="noopener">Window Sticker PDF</a>`
               : `<button disabled>Sticker PDF N/A</button>`
           }
-          <button onclick="sendBidRequest('${v.vin || ""}')">Send Bid Request</button>
           <button class="${isCompared ? "active-action" : ""}" onclick="toggleCompare('${v.vin || ""}')">${isCompared ? "Remove Compare" : "Add to Compare"}</button>
           <button onclick="copyMessage('${v.vin || ""}')">Copy Message</button>
         </div>
@@ -2055,6 +2078,9 @@ function removeVehicle(vin) {
 function updateSelectedCount() {
   const count = document.getElementById("selectedCount");
   if (count) count.textContent = selectedVins.size;
+  const cartCount = document.getElementById("cartCount");
+  if (cartCount) cartCount.textContent = selectedVins.size;
+  renderCartPanel();
 }
 
 function toggleSelected(vin, checked) {
@@ -2067,6 +2093,64 @@ function toggleSelected(vin, checked) {
   updateSelectedCount();
   const card = document.querySelector(`[data-vin="${vin}"]`);
   if (card) card.classList.toggle("selected-card", checked);
+  if (checked) animateCarToCart(vin);
+  renderVehicles();
+}
+
+function toggleCartPanel(force) {
+  const panel = document.getElementById("cartPanel");
+  if (!panel) return;
+  const shouldOpen = typeof force === "boolean" ? force : panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !shouldOpen);
+  renderCartPanel();
+}
+
+function renderCartPanel() {
+  const box = document.getElementById("cartItems");
+  if (!box) return;
+
+  const added = vehicles.filter((v) => selectedVins.has(v.vin));
+  if (!added.length) {
+    box.innerHTML = `<span class="muted">No cars added yet.</span>`;
+    return;
+  }
+
+  box.innerHTML = added
+    .map((v) => {
+      const image = v.image_url ? `<img src="${escapeAttr(v.image_url)}" alt="" onerror="this.remove()" />` : `<div class="cart-no-image"></div>`;
+      return `
+        <div class="cart-item">
+          ${image}
+          <div>
+            <b>${v.year || ""} ${v.brand || ""} ${v.model || ""}</b>
+            <span>${v.trim || "Trim verify"} · ${v.dealer_name || "Dealer"}</span>
+          </div>
+          <button type="button" onclick="toggleSelected('${v.vin}', false)">Remove</button>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function animateCarToCart(vin) {
+  const card = document.querySelector(`[data-vin="${vin}"] .image-box`);
+  const cart = document.querySelector(".cart-btn");
+  if (!card || !cart) return;
+
+  const start = card.getBoundingClientRect();
+  const end = cart.getBoundingClientRect();
+  const flyer = document.createElement("div");
+  flyer.className = "cart-flyer";
+  flyer.style.left = `${start.left + start.width / 2}px`;
+  flyer.style.top = `${start.top + start.height / 2}px`;
+  document.body.appendChild(flyer);
+
+  requestAnimationFrame(() => {
+    flyer.style.transform = `translate(${end.left - start.left}px, ${end.top - start.top}px) scale(0.25)`;
+    flyer.style.opacity = "0";
+  });
+
+  setTimeout(() => flyer.remove(), 650);
 }
 
 function toggleTradeIn(enabled) {

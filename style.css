@@ -40,6 +40,121 @@ body {
   cursor: pointer;
 }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cart-btn {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: white;
+  color: #111827;
+  padding: 10px 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cart-btn span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: white;
+  font-size: 12px;
+}
+
+.cart-btn::after {
+  content: "v";
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.cart-panel {
+  position: fixed;
+  top: 88px;
+  right: 24px;
+  z-index: 40;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  padding: 14px;
+}
+
+.cart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cart-items {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cart-item {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.cart-item img,
+.cart-no-image {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #e2e8f0;
+}
+
+.cart-item b,
+.cart-item span {
+  display: block;
+}
+
+.cart-item span {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.cart-item button {
+  border: none;
+  border-radius: 9px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 900;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.cart-flyer {
+  position: fixed;
+  z-index: 80;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.28);
+  pointer-events: none;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.6s ease;
+}
+
 .container {
   max-width: 1550px;
   margin: 0 auto;
@@ -59,7 +174,6 @@ body {
 .loading-panel,
 .program-preview,
 .dealer-coverage,
-.result-filters,
 .offer-panel {
   background: white;
   border-radius: 18px;
@@ -461,19 +575,17 @@ body {
 }
 
 .dealer-coverage,
-.result-filters,
 .offer-panel {
   padding: 12px;
   margin-bottom: 18px;
 }
 
 .result-filters {
-  max-height: 220px;
-  overflow: auto;
+  margin-bottom: 14px;
 }
 
 .results-head {
-  display: grid;
+  display: none !important;
   grid-template-columns: 1fr auto;
   gap: 12px;
   align-items: start;
@@ -630,22 +742,31 @@ body {
   gap: 12px;
 }
 
-.sort-row {
+.filter-line {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 12px;
+  align-items: end;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
 }
 
-.sort-row label {
-  font-size: 13px;
+.filter-select,
+.inline-filter-group {
+  display: grid;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.filter-select span,
+.inline-filter-group > span {
+  font-size: 12px;
   font-weight: 900;
   color: #475569;
 }
 
-.sort-row select {
+.filter-select select {
   height: 36px;
+  min-width: 170px;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
   background: white;
@@ -653,46 +774,33 @@ body {
   font-weight: 800;
 }
 
-.chip-group {
-  margin-bottom: 10px;
+.sort-select select {
+  min-width: 150px;
 }
 
-.chip-group b {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-
-.chip-row {
+.inline-filter-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  gap: 6px;
 }
 
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 5px 9px;
+.inline-filter-options button,
+.compact-clear {
+  height: 36px;
   border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #f8fafc;
   color: #334155;
+  padding: 0 11px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.filter-chip.active {
+.inline-filter-options button.active {
   border-color: #2563eb;
   background: #eff6ff;
   color: #1d4ed8;
-}
-
-.filter-chip input {
-  width: 15px;
-  height: 15px;
 }
 
 .target-box {
@@ -995,6 +1103,10 @@ body {
   color: #1d4ed8;
   font-size: 13px;
   font-weight: 900;
+  white-space: nowrap;
+}
+
+.select-car span {
   white-space: nowrap;
 }
 
