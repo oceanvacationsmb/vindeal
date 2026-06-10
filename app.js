@@ -9,6 +9,8 @@ let colorsCatalog = [];
 let rebatesCatalog = [];
 let leaseProgramsCatalog = [];
 let leaseProgramPreview = null;
+let vpicMakesCatalog = [];
+let vpicModelsCache = {};
 let removedVins = new Set();
 let favoriteVins = new Set();
 let selectedVins = new Set();
@@ -282,11 +284,10 @@ function setResultsSource(text) {
 
 function setSearchUiState(state) {
   currentSearchUiState = state;
-  const isIdle = state === "idle";
   const isLoading = state === "loading";
   const isResults = state === "results";
 
-  document.getElementById("emptyState")?.classList.toggle("hidden", !isIdle);
+  document.getElementById("emptyState")?.classList.add("hidden");
   document.getElementById("loadingPanel")?.classList.toggle("hidden", !isLoading);
   document.getElementById("searchSummary")?.classList.toggle("hidden", !isResults);
   document.getElementById("resultsHead")?.classList.toggle("hidden", !isResults);
@@ -981,6 +982,8 @@ async function loadCatalog() {
   );
 
   updateBrandOptions();
+  initTradeVehicleOptions();
+  loadVpicMakesForTrade();
 }
 
 async function loadAllColors() {
@@ -1070,6 +1073,102 @@ async function refreshModelFilters() {
   } catch (error) {
     console.warn("Program/incentive preload failed", error);
   }
+}
+
+function catalogMakes() {
+  return unique(catalog.map((x) => x.brand)).sort((a, b) => a.localeCompare(b));
+}
+
+function catalogModelsFor(make, year = "") {
+  return unique(
+    catalog
+      .filter((x) => sameText(x.brand, make))
+      .filter((x) => !year || Number(x.year) === Number(year))
+      .map((x) => x.model)
+  ).sort((a, b) => a.localeCompare(b));
+}
+
+function catalogTrimsFor(make, model, year = "") {
+  return unique(
+    catalog
+      .filter((x) => sameText(x.brand, make) && sameText(x.model, model))
+      .filter((x) => !year || Number(x.year) === Number(year))
+      .map((x) => x.trim)
+  ).sort((a, b) => a.localeCompare(b));
+}
+
+function setSelectOptions(select, values, placeholder = "Select") {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${placeholder}</option>`;
+  values.forEach((value) => {
+    select.innerHTML += `<option value="${value}">${value}</option>`;
+  });
+  if (values.includes(current)) select.value = current;
+}
+
+function initTradeVehicleOptions() {
+  const yearSelect = document.getElementById("tradeYear");
+  if (yearSelect) {
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 31 }, (_, index) => String(currentYear + 1 - index));
+    setSelectOptions(yearSelect, years, "Year");
+  }
+
+  const makes = unique([...catalogMakes(), ...vpicMakesCatalog]).sort((a, b) => a.localeCompare(b));
+  setSelectOptions(document.getElementById("tradeMake"), makes, "Make");
+  updateTradeModelOptions();
+}
+
+async function loadVpicMakesForTrade() {
+  try {
+    const response = await fetch("https://vpic.nhtsa.dot.gov/api/vehicles/GetAllMakes?format=json");
+    const data = await response.json();
+    vpicMakesCatalog = unique((data.Results || []).map((item) => item.Make_Name)).sort((a, b) => a.localeCompare(b));
+
+    const makeSelect = document.getElementById("tradeMake");
+    const merged = unique([...catalogMakes(), ...vpicMakesCatalog]).sort((a, b) => a.localeCompare(b));
+    setSelectOptions(makeSelect, merged, "Make");
+  } catch (error) {
+    console.warn("NHTSA vPIC make list unavailable, using local catalog", error);
+  }
+}
+
+async function updateTradeModelOptions() {
+  const make = document.getElementById("tradeMake")?.value || "";
+  const year = document.getElementById("tradeYear")?.value || "";
+  let models = catalogModelsFor(make, year);
+
+  if (make) {
+    const cacheKey = `${make}:${year || "any"}`;
+    if (!vpicModelsCache[cacheKey]) {
+      try {
+        const encodedMake = encodeURIComponent(make);
+        const endpoint = year
+          ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodedMake}/modelyear/${year}?format=json`
+          : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodedMake}?format=json`;
+        const response = await fetch(endpoint);
+        const data = await response.json();
+        vpicModelsCache[cacheKey] = unique((data.Results || []).map((item) => item.Model_Name)).sort((a, b) => a.localeCompare(b));
+      } catch (error) {
+        vpicModelsCache[cacheKey] = [];
+        console.warn("NHTSA vPIC model list unavailable, using local catalog", error);
+      }
+    }
+
+    models = unique([...models, ...vpicModelsCache[cacheKey]]).sort((a, b) => a.localeCompare(b));
+  }
+
+  setSelectOptions(document.getElementById("tradeModel"), models, "Model");
+  updateTradeTrimOptions();
+}
+
+function updateTradeTrimOptions() {
+  const make = document.getElementById("tradeMake")?.value || "";
+  const model = document.getElementById("tradeModel")?.value || "";
+  const year = document.getElementById("tradeYear")?.value || "";
+  const trims = catalogTrimsFor(make, model, year);
+  setSelectOptions(document.getElementById("tradeTrim"), trims, trims.length ? "Trim" : "Trim unavailable");
 }
 
 function buildCheckPills(boxId, values, name, checkedAny = true) {
@@ -1452,7 +1551,7 @@ async function scanBackendInventory() {
   document.getElementById("resultFilters")?.classList.add("hidden");
   document.getElementById("dealerCoverage")?.classList.add("hidden");
   setSearchUiState("loading");
-  setSearchProgress(0, "Starting search", "Preparing Hyundai dealer and inventory search.");
+  setSearchProgress(0, "Starting search", "Preparing dealer and inventory search.");
   resetSearchProgressLog();
   addSearchProgressLog(0, "Search started", "Preparing request.");
   setResultsSource("");
@@ -1483,7 +1582,7 @@ async function scanBackendInventory() {
     ignoreSeedDealerLimit: true,
   };
   lastSearchBody = body;
-  setSearchProgress(10, "Finding dealers", `Searching Hyundai dealers within ${body.radius} miles from ${body.zipCode}.`);
+  setSearchProgress(10, "Finding dealers", `Searching ${body.brand} dealers within ${body.radius} miles from ${body.zipCode}.`);
   addSearchProgressLog(10, "Finding dealers", `${body.brand} dealers near ${body.zipCode}.`);
 
   try {
@@ -1547,7 +1646,7 @@ async function scanBackendInventory() {
     setSearchUiState("idle");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Find My Car";
+    btn.textContent = "Find My Lease";
   }
 }
 
@@ -1981,10 +2080,10 @@ function toggleTradeIn(enabled) {
 
   if (addBtn) addBtn.classList.toggle("hidden", enabled);
   if (removeBtn) removeBtn.classList.toggle("hidden", !enabled);
-  if (status) status.textContent = enabled ? "Trade added" : "Tell dealers what to expect.";
+  if (status) status.textContent = enabled ? "Trade added. Select lease, finance, or owned first." : "Optional. Add this only if the buyer wants the dealer to include trade equity.";
 
   if (!enabled) {
-    ["tradeMake", "tradeModel", "tradeTrim", "tradeVin", "tradePlate", "tradePlateState", "tradeMileage", "tradeKbbValue", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment", "tradeLeaseEndDate"].forEach((id) => {
+    ["tradeMake", "tradeModel", "tradeTrim", "tradeYear", "tradePlate", "tradePlateState", "tradeMileage", "tradeKbbValue", "tradePayoff", "tradePaymentsLeft", "tradeMonthlyPayment", "tradeLeaseEndDate", "tradeLeaseResidualValue", "tradeLeaseMilesAllowed", "tradeTireCondition"].forEach((id) => {
       const input = document.getElementById(id);
       if (input) input.value = "";
     });
@@ -1993,6 +2092,33 @@ function toggleTradeIn(enabled) {
     if (condition) condition.value = "";
     const loanType = document.getElementById("tradeLoanType");
     if (loanType) loanType.value = "";
+    handleTradeAccountTypeChange(false);
+  } else {
+    initTradeVehicleOptions();
+    handleTradeAccountTypeChange(false);
+  }
+}
+
+function handleTradeAccountTypeChange(showLeaseAlert = true) {
+  const type = document.getElementById("tradeLoanType")?.value || "";
+  const isLease = type === "lease";
+  const isFinance = type === "finance";
+
+  document.querySelectorAll(".trade-lease-field").forEach((field) => field.classList.toggle("hidden", !isLease));
+  document.querySelectorAll(".trade-finance-field").forEach((field) => field.classList.toggle("hidden", !isFinance));
+  document.querySelectorAll(".trade-payment-field").forEach((field) => field.classList.toggle("hidden", !(isLease || isFinance)));
+  document.getElementById("leaseTradeDisclaimer")?.classList.toggle("hidden", !isLease);
+
+  const status = document.getElementById("tradeStatus");
+  if (status) {
+    if (isLease) status.textContent = "Leased trade added. Dealer must verify contract rules.";
+    else if (isFinance) status.textContent = "Financed trade added. Add payoff, payment, and months left.";
+    else if (type === "owned") status.textContent = "Owned trade added. No payoff or contract fields needed.";
+    else status.textContent = "Trade added. Select lease, finance, or owned first.";
+  }
+
+  if (isLease && showLeaseAlert) {
+    alert("If the trade is leased, the dealer must review the lease contract and payoff rules. Some lease contracts restrict third-party payoffs or trading into a different make.");
   }
 }
 
@@ -2034,17 +2160,20 @@ function getTradeData() {
     trade_make: document.getElementById("tradeMake")?.value.trim() || "",
     trade_model: document.getElementById("tradeModel")?.value.trim() || "",
     trade_trim: document.getElementById("tradeTrim")?.value.trim() || "",
-    trade_vin: document.getElementById("tradeVin").value.trim(),
+    trade_year: Number(document.getElementById("tradeYear")?.value || 0),
     license_plate: document.getElementById("tradePlate").value.trim(),
     plate_state: document.getElementById("tradePlateState").value.trim(),
     mileage: Number(document.getElementById("tradeMileage").value || 0),
     kbb_expected_value: Number(document.getElementById("tradeKbbValue").value || 0),
     condition: document.getElementById("tradeCondition").value,
+    tire_condition: document.getElementById("tradeTireCondition")?.value || "",
     loan_type: document.getElementById("tradeLoanType").value,
     payoff_amount: Number(document.getElementById("tradePayoff").value || 0),
     payments_left: Number(document.getElementById("tradePaymentsLeft").value || 0),
     monthly_payment: Number(document.getElementById("tradeMonthlyPayment").value || 0),
     lease_end_date: document.getElementById("tradeLeaseEndDate")?.value || "",
+    lease_residual_value: Number(document.getElementById("tradeLeaseResidualValue")?.value || 0),
+    lease_miles_allowed_per_year: Number(document.getElementById("tradeLeaseMilesAllowed")?.value || 0),
     kbb_low: 0,
     kbb_average: 0,
     kbb_high: 0,

@@ -19,27 +19,6 @@
     <div class="app-shell">
       <aside class="sidebar">
         <section class="side-card search-strip">
-          <div class="field search-field zip-field">
-            <label>ZIP</label>
-            <input id="zipCode" type="text" value="29577" />
-          </div>
-
-          <div class="field search-field">
-            <label>Radius</label>
-            <select id="radius">
-              <option value="50">50 mi</option>
-              <option value="100">100 mi</option>
-              <option value="250" selected>250 mi</option>
-              <option value="500">500 mi</option>
-              <option value="1000">1000 mi</option>
-            </select>
-          </div>
-
-          <div class="field search-field state-field">
-            <label>State</label>
-            <select id="registrationState" onchange="loadProgramsForSelectedCar()"></select>
-          </div>
-
           <div class="field search-field">
             <label>Make</label>
             <select id="brand" onchange="updateModelOptions()"></select>
@@ -60,7 +39,23 @@
             <select id="year" onchange="refreshModelFilters()"></select>
           </div>
 
-          <button id="scanBtn" onclick="scanBackendInventory()">Find My Car</button>
+          <div class="field search-field zip-field">
+            <label>ZIP</label>
+            <input id="zipCode" type="text" value="29577" />
+          </div>
+
+          <div class="field search-field">
+            <label>Radius</label>
+            <select id="radius">
+              <option value="50">50 mi</option>
+              <option value="100">100 mi</option>
+              <option value="250" selected>250 mi</option>
+              <option value="500">500 mi</option>
+              <option value="1000">1000 mi</option>
+            </select>
+          </div>
+
+          <button id="scanBtn" onclick="scanBackendInventory()">Find My Lease</button>
         </section>
       </aside>
 
@@ -96,11 +91,7 @@
           <span id="searchProgressText">Finding dealers near your ZIP code.</span>
         </section>
 
-        <section id="emptyState" class="empty-state">
-          <div>
-            <h2>Start with a simple search</h2>
-            <p>Results, filters, dealer coverage, and selected-car actions will appear here after cars load.</p>
-          </div>
+        <section id="emptyState" class="empty-state hidden">
           <strong id="connectionStatus" class="connection-status checking">Checking</strong>
         </section>
 
@@ -166,6 +157,11 @@
         <div class="field wide-field">
           <label>Address</label>
           <input id="customerAddress" type="text" placeholder="Street, city, state, ZIP" />
+        </div>
+
+        <div class="field">
+          <label>Registering State</label>
+          <select id="registrationState" onchange="loadProgramsForSelectedCar()"></select>
         </div>
 
         <div class="field">
@@ -245,24 +241,34 @@
 
         <div id="tradeBox" class="trade-box hidden">
           <div class="form-grid contact-grid">
+            <div class="field wide-field">
+              <label>Trade Account Type</label>
+              <select id="tradeLoanType" onchange="handleTradeAccountTypeChange()">
+                <option value="">Select lease, finance, or owned first</option>
+                <option value="lease">Leased</option>
+                <option value="finance">Financed</option>
+                <option value="owned">Owned / paid off</option>
+              </select>
+            </div>
+
             <div class="field">
               <label>Make</label>
-              <input id="tradeMake" type="text" placeholder="Trade make" />
+              <select id="tradeMake" onchange="updateTradeModelOptions()"></select>
             </div>
 
             <div class="field">
               <label>Model</label>
-              <input id="tradeModel" type="text" placeholder="Trade model" />
+              <select id="tradeModel" onchange="updateTradeTrimOptions()"></select>
             </div>
 
             <div class="field">
               <label>Trim</label>
-              <input id="tradeTrim" type="text" placeholder="Trim" />
+              <select id="tradeTrim"></select>
             </div>
 
             <div class="field">
-              <label>Trade VIN</label>
-              <input id="tradeVin" type="text" placeholder="VIN" />
+              <label>Year</label>
+              <select id="tradeYear" onchange="updateTradeModelOptions()"></select>
             </div>
 
             <div class="field">
@@ -278,6 +284,17 @@
             <div class="field">
               <label>Mileage</label>
               <input id="tradeMileage" type="number" placeholder="45000" />
+            </div>
+
+            <div class="field">
+              <label>Tire Condition</label>
+              <select id="tradeTireCondition">
+                <option value="">Select</option>
+                <option value="excellent">Excellent</option>
+                <option value="good">Good</option>
+                <option value="fair">Fair</option>
+                <option value="needs_replacement">Needs replacement</option>
+              </select>
             </div>
 
             <div class="field">
@@ -297,39 +314,44 @@
               </select>
             </div>
 
-            <div class="field">
-              <label>Current Account</label>
-              <select id="tradeLoanType">
-                <option value="">Select</option>
-                <option value="finance">Finance</option>
-                <option value="lease">Lease</option>
-                <option value="paid_off">Paid off</option>
-              </select>
-            </div>
-
-            <div class="field">
+            <div class="field trade-finance-field hidden">
               <label>Payoff</label>
               <input id="tradePayoff" type="number" placeholder="0" />
             </div>
 
-            <div class="field">
+            <div class="field trade-payment-field hidden">
               <label>Current Payment</label>
               <input id="tradeMonthlyPayment" type="number" placeholder="0" />
             </div>
 
-            <div class="field">
-              <label>Payments Left</label>
+            <div class="field trade-finance-field hidden">
+              <label>Months Left</label>
               <input id="tradePaymentsLeft" type="number" placeholder="0" />
             </div>
 
-            <div class="field">
+            <div class="field trade-lease-field hidden">
+              <label>Lease Residual Value</label>
+              <input id="tradeLeaseResidualValue" type="number" placeholder="From lease contract" />
+            </div>
+
+            <div class="field trade-lease-field hidden">
+              <label>Lease Miles Allowed / Year</label>
+              <input id="tradeLeaseMilesAllowed" type="number" placeholder="10000" />
+            </div>
+
+            <div class="field trade-lease-field hidden">
               <label>Lease End Date</label>
               <input id="tradeLeaseEndDate" type="date" />
             </div>
           </div>
 
           <div class="trade-note">
-            If the trade is leased, the dealer must review the lease contract and payoff rules. Some lease contracts restrict third-party payoffs or trading into a different make.
+            Vehicle lists use your local catalog first and can be expanded from the public NHTSA vPIC make/model source.
+          </div>
+
+          <div id="leaseTradeDisclaimer" class="trade-note lease-note hidden">
+            Leased trade <button type="button" class="help-tip" data-help="If the trade is leased, the dealer must review the lease contract and payoff rules. Some lease contracts restrict third-party payoffs or trading into a different make." aria-label="Lease trade warning">?</button>
+            <span>If the trade is leased, the dealer must review the lease contract and payoff rules before quoting the deal.</span>
           </div>
         </div>
       </div>
@@ -338,6 +360,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=99"></script>
+  <script src="app.js?v=100"></script>
 </body>
 </html>
