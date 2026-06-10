@@ -8,7 +8,7 @@ type SearchBody = {
   progressMode?: string;
 };
 
-const SCANNER_VERSION = "2026-06-07-safe-listing-links-v12";
+const SCANNER_VERSION = "2026-06-10-embedded-json-extractor-v13";
 
 type Dealer = {
   name: string;
@@ -742,10 +742,195 @@ function extractVehiclesFromHtml(
 ) {
   const vehicles = [
     ...extractVehiclesFromJsonLd(html, pageUrl, dealer, criteria),
+    ...extractVehiclesFromEmbeddedJson(html, pageUrl, dealer, criteria),
     ...extractVehiclesFromVinBlocks(html, pageUrl, dealer, criteria),
   ];
 
   return uniqueVehiclesByVin(vehicles);
+}
+
+function extractVehiclesFromEmbeddedJson(
+  html: string,
+  pageUrl: string,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const vehicles: Vehicle[] = [];
+  const candidates = extractEmbeddedJsonCandidates(html);
+
+  candidates.forEach((candidate) => {
+    const parsed = safeJsonParse(candidate);
+    if (!parsed) return;
+
+    walkJson(parsed, (item) => {
+      const vehicle = vehicleFromJsonObject(item, pageUrl, dealer, criteria);
+      if (vehicle) vehicles.push(vehicle);
+    });
+  });
+
+  return uniqueVehiclesByVin(vehicles);
+}
+
+function extractEmbeddedJsonCandidates(html: string) {
+  const candidates: string[] = [];
+
+  [...html.matchAll(/<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi)].forEach((match) => {
+    const text = decodeHtmlEntities(match[1] || "").trim();
+    if (text && /\b[A-HJ-NPR-Z0-9]{17}\b/i.test(text)) candidates.push(text);
+  });
+
+  [...html.matchAll(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/gi)].forEach((match) => {
+    const text = decodeHtmlEntities(match[1] || "").trim();
+    if (text && /\b[A-HJ-NPR-Z0-9]{17}\b/i.test(text)) candidates.push(text);
+  });
+
+  const assignmentNames = [
+    "__PRELOADED_STATE__",
+    "__INITIAL_STATE__",
+    "__APOLLO_STATE__",
+    "__NUXT__",
+    "inventoryData",
+    "vehicleData",
+  ];
+
+  assignmentNames.forEach((name) => {
+    const assignmentRegex = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*`, "gi");
+    for (const match of html.matchAll(assignmentRegex)) {
+      const start = Number(match.index || 0) + match[0].length;
+      const extracted = extractBalancedJson(html, start);
+      if (extracted && /\b[A-HJ-NPR-Z0-9]{17}\b/i.test(extracted)) {
+        candidates.push(decodeHtmlEntities(extracted));
+      }
+    }
+  });
+
+  return uniqueStrings(candidates).slice(0, 12);
+}
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function extractBalancedJson(text: string, start: number) {
+  let index = start;
+  while (index < text.length && /\s/.test(text[index])) index += 1;
+  const opener = text[index];
+  const closer = opener === "{" ? "}" : opener === "[" ? "]" : "";
+  if (!closer) return "";
+
+  let depth = 0;
+  let inString = false;
+  let quote = "";
+  let escaped = false;
+
+  for (let i = index; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      inString = true;
+      quote = char;
+      continue;
+    }
+
+    if (char === opener) depth += 1;
+    if (char === closer) depth -= 1;
+    if (depth === 0) return text.slice(index, i + 1);
+  }
+
+  return "";
+}
+
+function walkJson(value: unknown, visit: (item: Record<string, any>) => void, depth = 0) {
+  if (!value || depth > 12) return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => walkJson(item, visit, depth + 1));
+    return;
+  }
+
+  if (typeof value === "object") {
+    const item = value as Record<string, any>;
+    visit(item);
+    Object.values(item).forEach((child) => walkJson(child, visit, depth + 1));
+  }
+}
+
+function vehicleFromJsonObject(
+  item: Record<string, any>,
+  pageUrl: string,
+  dealer: Dealer,
+  criteria: { brand: string; model: string; year: number }
+) {
+  const jsonText = JSON.stringify(item).slice(0, 20_000);
+  const vin = cleanVin(
+    pickStringByKey(item, ["vin", "VIN", "vehicleIdentificationNumber", "vehicleVin"]) ||
+      jsonText.match(/\b[A-HJ-NPR-Z0-9]{17}\b/i)?.[0] ||
+      ""
+  );
+  if (!vin) return null;
+
+  if (!matchesCriteria(jsonText, criteria)) return null;
+
+  const listingUrl = safeUrl(
+    pickStringByKey(item, [
+      "url",
+      "vdpUrl",
+      "detailUrl",
+      "vehicleDetailUrl",
+      "link",
+      "permalink",
+      "href",
+    ]) || guessVehicleDetailUrl(jsonText, vin, pageUrl) || "",
+    pageUrl
+  );
+
+  const msrp = pickJsonPrice(item, ["msrp", "MSRP", "retailPrice", "stickerPrice", "listPrice"]);
+  const salePrice = pickJsonPrice(item, ["salePrice", "internetPrice", "price", "askingPrice", "ourPrice", "finalPrice"]);
+  const image = pickImageFromJson(item, pageUrl);
+  const stock = pickStringByKey(item, ["stock", "stockNumber", "stock_number", "stockNo", "stock_num"]);
+  const year = Number(pickStringByKey(item, ["year", "modelYear"]) || criteria.year || 0);
+  const make = cleanText(pickStringByKey(item, ["make", "brand", "manufacturer"]) || criteria.brand);
+  const model = cleanText(pickStringByKey(item, ["model", "modelName"]) || criteria.model);
+  const trim = cleanText(pickStringByKey(item, ["trim", "trimName", "series"]) || guessTrim(jsonText));
+  const exterior = cleanColor(pickStringByKey(item, ["exteriorColor", "exterior_color", "extColor", "color", "exterior"]));
+  const interior = cleanColor(pickStringByKey(item, ["interiorColor", "interior_color", "intColor", "interior"]));
+  const stickerUrl = safeUrl(pickStringByKey(item, ["windowStickerUrl", "windowSticker", "stickerUrl"]) || "", pageUrl);
+  const offers = extractManufacturerOffers(jsonText, { year, brand: make, model });
+
+  return buildVehicle(vin, listingUrl || pageUrl, dealer, {
+    brand: make || criteria.brand,
+    model: model || criteria.model,
+    year: year || criteria.year,
+  }, {
+    trim,
+    stock_number: stock,
+    msrp,
+    sale_price: salePrice,
+    exterior_color: exterior,
+    interior_color: interior,
+    image_url: image,
+    window_sticker_url: stickerUrl,
+    dealer_detected_offers: offers.rows,
+    raw_data: {
+      source: "embedded_json",
+      embedded_json_keys: Object.keys(item).slice(0, 40),
+    },
+  });
 }
 
 function extractVehiclesFromJsonLd(
@@ -986,6 +1171,72 @@ function guessTrim(text: string) {
   return found || "Verify";
 }
 
+function pickStringByKey(item: Record<string, any>, keys: string[]): string {
+  for (const key of keys) {
+    if (item[key] !== undefined && item[key] !== null && typeof item[key] !== "object") {
+      const value = cleanText(item[key]);
+      if (value) return value;
+    }
+  }
+
+  const lowered = Object.entries(item).find(([key, value]) => {
+    return keys.some((target) => key.toLowerCase() === target.toLowerCase()) &&
+      value !== undefined &&
+      value !== null &&
+      typeof value !== "object";
+  });
+
+  return lowered ? cleanText(lowered[1]) : "";
+}
+
+function pickJsonPrice(item: Record<string, any>, keys: string[]) {
+  for (const key of keys) {
+    const direct = pickPrice(item[key]);
+    if (direct) return direct;
+  }
+
+  const matched = Object.entries(item).find(([key, value]) => {
+    return keys.some((target) => key.toLowerCase() === target.toLowerCase()) && pickPrice(value);
+  });
+
+  return matched ? pickPrice(matched[1]) : 0;
+}
+
+function pickImageFromJson(item: Record<string, any>, pageUrl: string): string {
+  const direct = pickStringByKey(item, ["image", "imageUrl", "image_url", "photo", "photoUrl", "primaryPhoto", "thumbnail"]);
+  const directUrl = safeImageUrl(direct, pageUrl);
+  if (directUrl) return directUrl;
+
+  const arrays = ["images", "photos", "media", "gallery"];
+  for (const key of arrays) {
+    const value = item[key];
+    const image = imageFromUnknown(value, pageUrl);
+    if (image) return image;
+  }
+
+  return "";
+}
+
+function imageFromUnknown(value: unknown, pageUrl: string): string {
+  if (!value) return "";
+  if (typeof value === "string") return safeImageUrl(value, pageUrl);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const image = imageFromUnknown(item, pageUrl);
+      if (image) return image;
+    }
+    return "";
+  }
+
+  if (typeof value === "object") {
+    const item = value as Record<string, any>;
+    return imageFromUnknown(item.url || item.src || item.href || item.image || item.photo || item.thumbnail, pageUrl);
+  }
+
+  return "";
+}
+
 function guessStock(text: string) {
   return text.match(/\bStock\s*(?:#|Number|No\.?)?\s*[:#]?\s*([A-Z0-9-]{4,16})/i)?.[1] || "";
 }
@@ -1083,6 +1334,10 @@ function uniqueVehiclesByVin(list: Vehicle[]) {
   });
 
   return unique;
+}
+
+function uniqueStrings(list: string[]) {
+  return [...new Set(list.filter(Boolean))];
 }
 
 async function fetchJson(url: string) {
